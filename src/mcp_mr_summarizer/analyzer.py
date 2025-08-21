@@ -769,23 +769,28 @@ This merge request contains {total_commits} commits with {total_files_changed} f
             description += "\n".join(key_changes[:5]) + "\n\n"
 
         if new_features:
-            description += f"### 🚀 New Features ({len(new_features)})\n"
+            description += f"### New Features ({len(new_features)})
+"
             description += "\n".join(new_features) + "\n\n"
 
         if refactoring:
-            description += f"### 🔧 Refactoring ({len(refactoring)})\n"
+            description += f"### Refactoring ({len(refactoring)})
+"
             description += "\n".join(refactoring) + "\n\n"
 
         if bug_fixes:
-            description += f"### 🐛 Bug Fixes ({len(bug_fixes)})\n"
+            description += f"### Bug Fixes ({len(bug_fixes)})
+"
             description += "\n".join(bug_fixes) + "\n\n"
 
         if breaking_changes:
-            description += f"### ⚠️ Breaking Changes ({len(breaking_changes)})\n"
+            description += f"### Breaking Changes ({len(breaking_changes)})
+"
             description += "\n".join(breaking_changes) + "\n\n"
 
         # Add file summary
-        description += f"### 📁 Files Affected ({len(all_files)})\n"
+        description += f"### Files Affected ({len(all_files)})
+"
         file_categories = self._categorize_files(all_files)
         for category, files in file_categories.items():
             if files:
@@ -795,7 +800,7 @@ This merge request contains {total_commits} commits with {total_files_changed} f
                 if len(files) > 10:
                     description += f"- ... and {len(files) - 10} more\n"
 
-        description += f"\n### 📊 Summary\n"
+        description += f"\n### Summary\n"
         description += f"- **Total Commits:** {total_commits}\n"
         description += f"- **Files Changed:** {total_files_changed}\n"
         description += f"- **Lines Added:** {total_insertions}\n"
