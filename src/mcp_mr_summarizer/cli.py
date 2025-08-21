@@ -113,16 +113,16 @@ async def main() -> None:
             output = await tools.analyze_git_commits(args.base, args.current, args.repo)
         elif args.command == "status":
             resources = GitResources(args.repo)
-            output = resources.get_repo_status()
+            output = await resources.get_repo_status()
         elif args.command == "branches":
             resources = GitResources(args.repo)
-            output = resources.get_branches()
+            output = await resources.get_branches()
         elif args.command == "commits":
             resources = GitResources(args.repo)
-            output = resources.get_commit_history(args.base, args.current)
+            output = await resources.get_commit_history(args.base, args.current)
         elif args.command == "files":
             resources = GitResources(args.repo)
-            output = resources.get_changed_files(args.base, args.current)
+            output = await resources.get_changed_files(args.base, args.current)
         else:
             print(f"Unknown command: {args.command}", file=sys.stderr)
             sys.exit(1)

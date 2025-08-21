@@ -2,13 +2,14 @@
 
 import json
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock, AsyncMock
 from subprocess import CalledProcessError
 
 from mcp_mr_summarizer.resources import GitResources
 from mcp_mr_summarizer.models import CommitInfo
 
 
+@pytest.mark.asyncio
 class TestGitResources:
     """Test cases for GitResources."""
 
@@ -22,8 +23,9 @@ class TestGitResources:
         assert resources.repo_path == "/path/to/repo"
         assert resources.analyzer is not None
 
+    @pytest.mark.asyncio
     @patch("subprocess.run")
-    def test_get_repo_status_success(self, mock_run):
+    async def test_get_repo_status_success(self, mock_run):
         """Test successful repository status retrieval."""
         # Mock successful git commands
         mock_run.side_effect = [
@@ -39,7 +41,7 @@ class TestGitResources:
             Mock(returncode=0, stdout=""),  # git diff --name-only
         ]
 
-        result = self.resources.get_repo_status()
+        result = await self.resources.get_repo_status()
         status = json.loads(result)
 
         assert status["repository"] == "repo"
@@ -51,15 +53,15 @@ class TestGitResources:
         assert status["unstaged_changes"] == 0
 
     @patch("subprocess.run")
-    def test_get_repo_status_no_git_repo(self, mock_run):
+    async def test_get_repo_status_no_git_repo(self, mock_run):
         """Test repository status when not in a git repository."""
         mock_run.side_effect = CalledProcessError(1, "git rev-parse --git-dir")
 
-        result = self.resources.get_repo_status()
+        result = await self.resources.get_repo_status()
         assert result == "No git repository found in current directory."
 
     @patch("subprocess.run")
-    def test_get_repo_status_no_remote(self, mock_run):
+    async def test_get_repo_status_no_remote(self, mock_run):
         """Test repository status when no remote is configured."""
         mock_run.side_effect = [
             Mock(returncode=0),  # git rev-parse --git-dir
@@ -72,13 +74,13 @@ class TestGitResources:
             Mock(returncode=0, stdout=""),  # git diff --name-only
         ]
 
-        result = self.resources.get_repo_status()
+        result = await self.resources.get_repo_status()
         status = json.loads(result)
 
         assert status["remote_url"] == "No remote configured"
 
     @patch("subprocess.run")
-    def test_get_repo_status_dirty_working_directory(self, mock_run):
+    async def test_get_repo_status_dirty_working_directory(self, mock_run):
         """Test repository status with dirty working directory."""
         mock_run.side_effect = [
             Mock(returncode=0),  # git rev-parse --git-dir
@@ -101,7 +103,7 @@ class TestGitResources:
             ),  # git diff --name-only
         ]
 
-        result = self.resources.get_repo_status()
+        result = await self.resources.get_repo_status()
         status = json.loads(result)
 
         assert status["is_dirty"] is True
@@ -109,7 +111,7 @@ class TestGitResources:
         assert status["staged_changes"] == 2
         assert status["unstaged_changes"] == 3
 
-    def test_get_commit_history_success(self):
+    async def test_get_commit_history_success(self):
         """Test successful commit history retrieval."""
         # Mock commits
         mock_commits = [
@@ -132,9 +134,9 @@ class TestGitResources:
                 deletions=0,
             ),
         ]
-        self.resources.analyzer.get_git_log = Mock(return_value=mock_commits)
+        self.resources.analyzer.get_git_log = AsyncMock(return_value=mock_commits)
 
-        result = self.resources.get_commit_history("main", "feature")
+        result = await self.resources.get_commit_history("main", "feature")
         commits = json.loads(result)
 
         assert len(commits) == 2
@@ -152,15 +154,15 @@ class TestGitResources:
         assert commits[1]["deletions"] == 0
         assert set(commits[1]["files_changed"]) == {"file3.py"}
 
-    def test_get_commit_history_no_commits(self):
+    async def test_get_commit_history_no_commits(self):
         """Test commit history when no commits are found."""
-        self.resources.analyzer.get_git_log = Mock(return_value=[])
+        self.resources.analyzer.get_git_log = AsyncMock(return_value=[])
 
-        result = self.resources.get_commit_history("main", "feature")
+        result = await self.resources.get_commit_history("main", "feature")
         assert result == "No commits found between main and feature"
 
     @patch("subprocess.run")
-    def test_get_branches_success(self, mock_run):
+    async def test_get_branches_success(self, mock_run):
         """Test successful branches retrieval."""
         mock_run.side_effect = [
             Mock(returncode=0),  # git rev-parse --git-dir
@@ -171,7 +173,7 @@ class TestGitResources:
             ),  # git branch -r --format
         ]
 
-        result = self.resources.get_branches()
+        result = await self.resources.get_branches()
         branches = json.loads(result)
 
         assert branches["current_branch"] == "main"
@@ -183,15 +185,15 @@ class TestGitResources:
         ]
 
     @patch("subprocess.run")
-    def test_get_branches_no_git_repo(self, mock_run):
+    async def test_get_branches_no_git_repo(self, mock_run):
         """Test branches retrieval when not in a git repository."""
         mock_run.side_effect = CalledProcessError(1, "git rev-parse --git-dir")
 
-        result = self.resources.get_branches()
+        result = await self.resources.get_branches()
         assert result == "No git repository found in current directory."
 
     @patch("subprocess.run")
-    def test_get_branches_empty_branches(self, mock_run):
+    async def test_get_branches_empty_branches(self, mock_run):
         """Test branches retrieval with empty branch lists."""
         mock_run.side_effect = [
             Mock(returncode=0),  # git rev-parse --git-dir
@@ -200,14 +202,14 @@ class TestGitResources:
             Mock(returncode=0, stdout="\n\n"),  # git branch -r --format (empty)
         ]
 
-        result = self.resources.get_branches()
+        result = await self.resources.get_branches()
         branches = json.loads(result)
 
         assert branches["current_branch"] == "main"
         assert branches["local_branches"] == []
         assert branches["remote_branches"] == []
 
-    def test_get_changed_files_success(self):
+    async def test_get_changed_files_success(self):
         """Test successful changed files retrieval."""
         # Mock commits with files
         mock_commits = [
@@ -230,7 +232,7 @@ class TestGitResources:
                 deletions=0,
             ),
         ]
-        self.resources.analyzer.get_git_log = Mock(return_value=mock_commits)
+        self.resources.analyzer.get_git_log = AsyncMock(return_value=mock_commits)
         self.resources.analyzer._categorize_files = Mock(
             return_value={
                 "Source": ["src/file1.py", "src/file2.py"],
@@ -239,7 +241,7 @@ class TestGitResources:
             }
         )
 
-        result = self.resources.get_changed_files("main", "feature")
+        result = await self.resources.get_changed_files("main", "feature")
         files = json.loads(result)
 
         assert "Source" in files
@@ -250,45 +252,45 @@ class TestGitResources:
         assert "tests/test1.py" in files["Tests"]
         assert "config.json" in files["Configuration"]
 
-    def test_get_changed_files_no_commits(self):
+    async def test_get_changed_files_no_commits(self):
         """Test changed files when no commits are found."""
-        self.resources.analyzer.get_git_log = Mock(return_value=[])
+        self.resources.analyzer.get_git_log = AsyncMock(return_value=[])
 
-        result = self.resources.get_changed_files("main", "feature")
+        result = await self.resources.get_changed_files("main", "feature")
         assert result == "No commits found between main and feature"
 
     @patch("subprocess.run")
-    def test_get_repo_status_exception_handling(self, mock_run):
+    async def test_get_repo_status_exception_handling(self, mock_run):
         """Test exception handling in get_repo_status."""
         mock_run.side_effect = Exception("Unexpected error")
 
-        result = self.resources.get_repo_status()
+        result = await self.resources.get_repo_status()
         assert result.startswith("Error getting repository status:")
 
-    def test_get_commit_history_exception_handling(self):
+    async def test_get_commit_history_exception_handling(self):
         """Test exception handling in get_commit_history."""
-        self.resources.analyzer.get_git_log = Mock(
+        self.resources.analyzer.get_git_log = AsyncMock(
             side_effect=Exception("Git log error")
         )
 
-        result = self.resources.get_commit_history("main", "feature")
+        result = await self.resources.get_commit_history("main", "feature")
         assert result.startswith("Error getting commit history:")
 
     @patch("subprocess.run")
-    def test_get_branches_exception_handling(self, mock_run):
+    async def test_get_branches_exception_handling(self, mock_run):
         """Test exception handling in get_branches."""
         mock_run.side_effect = Exception("Git branch error")
 
-        result = self.resources.get_branches()
+        result = await self.resources.get_branches()
         assert result.startswith("Error getting branches:")
 
-    def test_get_changed_files_exception_handling(self):
+    async def test_get_changed_files_exception_handling(self):
         """Test exception handling in get_changed_files."""
-        self.resources.analyzer.get_git_log = Mock(
+        self.resources.analyzer.get_git_log = AsyncMock(
             side_effect=Exception("Git log error")
         )
 
-        result = self.resources.get_changed_files("main", "feature")
+        result = await self.resources.get_changed_files("main", "feature")
         assert result.startswith("Error getting changed files:")
 
     def test_repo_path_parameter(self):

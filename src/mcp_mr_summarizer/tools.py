@@ -32,7 +32,7 @@ class GitTools:
 
     async def generate_merge_request_summary(
         self,
-        base_branch: str = "develop",
+        base_branch: str = "master",
         current_branch: str = "HEAD",
         repo_path: str = ".",
         format: str = "markdown",
@@ -114,7 +114,7 @@ class GitTools:
 
     async def analyze_git_commits(
         self,
-        base_branch: str = "develop",
+        base_branch: str = "master",
         current_branch: str = "HEAD",
         repo_path: str = ".",
     ) -> str:
@@ -317,33 +317,11 @@ class GitTools:
     ) -> str:
         """Synchronous version for backward compatibility."""
         # Run the async version in a new event loop
-        try:
-            loop = asyncio.get_running_loop()
-            if loop.is_running():
-                # If we're already in an event loop, create a new one
-                import concurrent.futures
-
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(
-                        asyncio.run,
-                        self.generate_merge_request_summary(
-                            base_branch, current_branch, repo_path, format
-                        ),
-                    )
-                    return future.result()
-            else:
-                return loop.run_until_complete(
-                    self.generate_merge_request_summary(
-                        base_branch, current_branch, repo_path, format
-                    )
-                )
-        except RuntimeError:
-            # No event loop, create one
-            return asyncio.run(
-                self.generate_merge_request_summary(
-                    base_branch, current_branch, repo_path, format
-                )
+        return asyncio.run(
+            self.generate_merge_request_summary(
+                base_branch, current_branch, repo_path, format
             )
+        )
 
     def analyze_git_commits_sync(
         self,
@@ -353,26 +331,6 @@ class GitTools:
     ) -> str:
         """Synchronous version for backward compatibility."""
         # Run the async version in a new event loop
-        try:
-            loop = asyncio.get_running_loop()
-            if loop.is_running():
-                # If we're already in an event loop, create a new one
-                import concurrent.futures
-
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(
-                        asyncio.run,
-                        self.analyze_git_commits(
-                            base_branch, current_branch, repo_path
-                        ),
-                    )
-                    return future.result()
-            else:
-                return loop.run_until_complete(
-                    self.analyze_git_commits(base_branch, current_branch, repo_path)
-                )
-        except RuntimeError:
-            # No event loop, create one
-            return asyncio.run(
-                self.analyze_git_commits(base_branch, current_branch, repo_path)
-            )
+        return asyncio.run(
+            self.analyze_git_commits(base_branch, current_branch, repo_path)
+        )

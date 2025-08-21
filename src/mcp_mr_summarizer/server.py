@@ -30,43 +30,43 @@ def get_analyzer():
 
 # Resources - Data retrieval without side effects
 @mcp.resource("git://repo/status")
-def get_repo_status() -> str:
+async def get_repo_status() -> str:
     """Get current repository status and basic information."""
     print("[DEBUG] Resource called: get_repo_status", file=sys.stderr)
-    return resources.get_repo_status()
+    return await resources.get_repo_status()
 
 
 @mcp.resource("git://commits/{base_branch}..{current_branch}")
-def get_commit_history(base_branch: str, current_branch: str) -> str:
+async def get_commit_history(base_branch: str, current_branch: str) -> str:
     """Get commit history between two branches."""
     print(
         f"[DEBUG] Resource called: get_commit_history({base_branch}, {current_branch})",
         file=sys.stderr,
     )
-    return resources.get_commit_history(base_branch, current_branch)
+    return await resources.get_commit_history(base_branch, current_branch)
 
 
 @mcp.resource("git://branches")
-def get_branches() -> str:
+async def get_branches() -> str:
     """Get list of all branches in the repository."""
     print("[DEBUG] Resource called: get_branches", file=sys.stderr)
-    return resources.get_branches()
+    return await resources.get_branches()
 
 
 @mcp.resource("git://files/changed/{base_branch}..{current_branch}")
-def get_changed_files(base_branch: str, current_branch: str) -> str:
+async def get_changed_files(base_branch: str, current_branch: str) -> str:
     """Get list of files changed between two branches."""
     print(
         f"[DEBUG] Resource called: get_changed_files({base_branch}, {current_branch})",
         file=sys.stderr,
     )
-    return resources.get_changed_files(base_branch, current_branch)
+    return await resources.get_changed_files(base_branch, current_branch)
 
 
 # Tools - Actions that perform computation or analysis
 @mcp.tool()
 async def generate_merge_request_summary(
-    base_branch: str = "develop",
+    base_branch: str = "master",
     current_branch: str = "HEAD",
     repo_path: str = ".",
     format: str = "markdown",
@@ -99,7 +99,7 @@ async def generate_merge_request_summary(
 
 @mcp.tool()
 async def analyze_git_commits(
-    base_branch: str = "develop", current_branch: str = "HEAD", repo_path: str = "."
+    base_branch: str = "master", current_branch: str = "HEAD", repo_path: str = "."
 ) -> str:
     """Analyze git commits and categorize them by type"""
     start_time = time.time()
@@ -123,4 +123,4 @@ async def analyze_git_commits(
 
 
 if __name__ == "__main__":
-    asyncio.run(mcp.run())
+    mcp.run()

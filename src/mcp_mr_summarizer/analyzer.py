@@ -64,8 +64,49 @@ class GitLogAnalyzer:
         if not os.path.exists(git_dir):
             raise ValueError(f"Not a git repository: {self.repo_path}")
 
+    async def _validate_branches(self, base_branch: str, current_branch: str) -> None:
+        """Validate that the specified branches exist in the repository."""
+        import asyncio
+
+        # Get all available branches
+        cmd = ["git", "-C", self.repo_path, "branch", "-a", "--format=%(refname:short)"]
+
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=30.0)
+
+            if process.returncode != 0:
+                stderr_text = stderr.decode() if stderr else ""
+                raise Exception(f"Failed to get branches: {stderr_text}")
+
+            available_branches = set(stdout.decode().strip().split("\n"))
+
+            # Check if branches exist
+            missing_branches = []
+            if base_branch not in available_branches:
+                missing_branches.append(base_branch)
+            if current_branch != "HEAD" and current_branch not in available_branches:
+                missing_branches.append(current_branch)
+
+            if missing_branches:
+                raise ValueError(
+                    f"Branch(es) not found: {', '.join(missing_branches)}. Available branches: {', '.join(sorted(available_branches))}"
+                )
+
+        except asyncio.TimeoutError:
+            raise TimeoutError("Branch validation timed out")
+        except Exception as e:
+            if "Branch(es) not found" in str(e):
+                raise
+            raise Exception(f"Error validating branches: {e}")
+
     async def get_git_log(
-        self, base_branch: str = "develop", current_branch: str = "HEAD"
+        self, base_branch: str = "master", current_branch: str = "HEAD"
     ) -> List[CommitInfo]:
         """Retrieve git log between two branches asynchronously."""
         start_time = time.time()
@@ -75,6 +116,9 @@ class GitLogAnalyzer:
         )
 
         try:
+            # Validate branches exist before proceeding
+            await self._validate_branches(base_branch, current_branch)
+
             # Get all commit information in one command
             cmd = [
                 "git",

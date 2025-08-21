@@ -187,29 +187,42 @@ class TestGitLogAnalyzer:
     @pytest.mark.asyncio
     async def test_get_git_log_success(self):
         """Test successful git log retrieval."""
-        # Mock the git command to return test data
         with patch("asyncio.create_subprocess_exec") as mock_subprocess:
-            # Mock successful git command
-            mock_process = AsyncMock()
-            mock_process.returncode = 0
-            mock_process.communicate.return_value = (
+            # Mock for _validate_branches
+            mock_validate_process = AsyncMock()
+            mock_validate_process.returncode = 0
+            mock_validate_process.communicate.return_value = (b"main\nfeature\n", b"")
+
+            # Mock for get_git_log
+            mock_log_process = AsyncMock()
+            mock_log_process.returncode = 0
+            mock_log_process.communicate.return_value = (
                 b"abc1234567890123456789012345678901234567\nTest Author\n2023-01-01\nTest commit\n\nfile1.py | 10 +++++-----\n",
                 b"",
             )
-            mock_subprocess.return_value = mock_process
+
+            mock_subprocess.side_effect = [mock_validate_process, mock_log_process]
 
             commits = await self.analyzer.get_git_log("main", "feature")
             assert isinstance(commits, list)
+            assert len(commits) == 1
+            assert commits[0].hash == "abc1234567890123456789012345678901234567"
 
     @pytest.mark.asyncio
     async def test_get_git_log_failure(self):
         """Test git log retrieval failure."""
         with patch("asyncio.create_subprocess_exec") as mock_subprocess:
-            # Mock failed git command
-            mock_process = AsyncMock()
-            mock_process.returncode = 1
-            mock_process.communicate.return_value = (b"", b"fatal: bad revision")
-            mock_subprocess.return_value = mock_process
+            # Mock for _validate_branches (successful)
+            mock_validate_process = AsyncMock()
+            mock_validate_process.returncode = 0
+            mock_validate_process.communicate.return_value = (b"main\nfeature\n", b"")
+
+            # Mock for get_git_log (failure)
+            mock_log_process = AsyncMock()
+            mock_log_process.returncode = 1
+            mock_log_process.communicate.return_value = (b"", b"fatal: bad revision")
+
+            mock_subprocess.side_effect = [mock_validate_process, mock_log_process]
 
             with pytest.raises(Exception, match="Unexpected error getting git log"):
                 await self.analyzer.get_git_log("main", "feature")

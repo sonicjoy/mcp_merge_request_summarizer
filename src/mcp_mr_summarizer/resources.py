@@ -23,7 +23,7 @@ class GitResources:
             self._analyzer = GitLogAnalyzer(self.repo_path)
         return self._analyzer
 
-    def get_repo_status(self) -> str:
+    async def get_repo_status(self) -> str:
         """Get current repository status and basic information."""
         try:
             # Check if we're in a git repository
@@ -130,10 +130,10 @@ class GitResources:
         except Exception as e:
             return f"Error getting repository status: {str(e)}"
 
-    def get_commit_history(self, base_branch: str, current_branch: str) -> str:
+    async def get_commit_history(self, base_branch: str, current_branch: str) -> str:
         """Get commit history between two branches."""
         try:
-            commits = self.analyzer.get_git_log(base_branch, current_branch)
+            commits = await self.analyzer.get_git_log(base_branch, current_branch)
 
             if not commits:
                 return f"No commits found between {base_branch} and {current_branch}"
@@ -156,7 +156,7 @@ class GitResources:
         except Exception as e:
             return f"Error getting commit history: {str(e)}"
 
-    def get_branches(self) -> str:
+    async def get_branches(self) -> str:
         """Get list of all branches in the repository."""
         try:
             # Check if we're in a git repository
@@ -218,10 +218,10 @@ class GitResources:
         except Exception as e:
             return f"Error getting branches: {str(e)}"
 
-    def get_changed_files(self, base_branch: str, current_branch: str) -> str:
+    async def get_changed_files(self, base_branch: str, current_branch: str) -> str:
         """Get list of files changed between two branches."""
         try:
-            commits = self.analyzer.get_git_log(base_branch, current_branch)
+            commits = await self.analyzer.get_git_log(base_branch, current_branch)
 
             if not commits:
                 return f"No commits found between {base_branch} and {current_branch}"
