@@ -132,12 +132,31 @@ This merge request contains 9 commits with 35 files changed (1543 insertions, 14
 
 **For VSCode/Cursor:**
 1. Open Settings (Ctrl/Cmd + ,)
-2. Search for "mcp"
-3. Click "Edit in settings.json"
+2. **For VSCode:** Search for "mcp" and click "Edit in settings.json"
+3. **For Cursor:** Go to **Tools & Integrations** → **New MCP Server**
 4. Add this configuration:
+
+**VSCode (settings.json):**
 ```json
 {
   "mcp.servers": {
+    "merge-request-summarizer": {
+      "command": "python",
+      "args": ["-m", "mcp_mr_summarizer.server"]
+    }
+  }
+}
+```
+
+**Cursor (GUI or settings.json):**
+- **Name:** `merge-request-summarizer`
+- **Command:** `python`
+- **Arguments:** `["-m", "mcp_mr_summarizer.server"]`
+
+**Cursor (alternative JSON format):**
+```json
+{
+  "mcpServers": {
     "merge-request-summarizer": {
       "command": "python",
       "args": ["-m", "mcp_mr_summarizer.server"]

@@ -47,19 +47,14 @@ pip install -e .
 
 #### Cursor Configuration
 1. Open Cursor Settings (Ctrl + ,)
-2. Search for "mcp"
-3. Click "Edit in settings.json"
+2. Go to **Tools & Integrations**
+3. Click **New MCP Server**
 4. Add this configuration:
-```json
-{
-    "mcp.servers": {
-        "merge-request-summarizer": {
-            "command": "python",
-            "args": ["-m", "mcp_mr_summarizer.server"]
-        }
-    }
-}
-```
+   - **Name:** `merge-request-summarizer`
+   - **Command:** `python`
+   - **Arguments:** `["-m", "mcp_mr_summarizer.server"]`
+5. Click **Save**
+6. Restart Cursor
 
 #### Claude Desktop Configuration
 1. Open Claude Desktop

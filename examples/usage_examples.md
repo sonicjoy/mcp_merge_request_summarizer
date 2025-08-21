@@ -12,10 +12,32 @@ chmod +x install.sh && ./install.sh
 ```
 
 ### 2. Editor Configuration
-**VSCode/Cursor:**
+**VSCode:**
 ```json
 {
     "mcp.servers": {
+        "merge-request-summarizer": {
+            "command": "python",
+            "args": ["-m", "mcp_mr_summarizer.server"]
+        }
+    }
+}
+```
+
+**Cursor:**
+1. Open Cursor Settings (Ctrl + ,)
+2. Go to **Tools & Integrations**
+3. Click **New MCP Server**
+4. Add:
+   - **Name:** `merge-request-summarizer`
+   - **Command:** `python`
+   - **Arguments:** `["-m", "mcp_mr_summarizer.server"]`
+5. Click **Save**
+
+**Cursor (alternative JSON format):**
+```json
+{
+    "mcpServers": {
         "merge-request-summarizer": {
             "command": "python",
             "args": ["-m", "mcp_mr_summarizer.server"]

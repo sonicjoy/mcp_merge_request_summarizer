@@ -9,10 +9,20 @@ from .tools import GitTools
 # Create an MCP server
 mcp = FastMCP("merge-request-summarizer")
 
-# Initialize analyzer, resources, and tools
-analyzer = GitLogAnalyzer()
+# Initialize resources and tools (these don't require git validation on import)
 resources = GitResources()
 tools = GitTools()
+
+# Initialize analyzer lazily to avoid validation errors on import
+_analyzer = None
+
+
+def get_analyzer():
+    """Get or create the analyzer instance."""
+    global _analyzer
+    if _analyzer is None:
+        _analyzer = GitLogAnalyzer()
+    return _analyzer
 
 
 # Resources - Data retrieval without side effects

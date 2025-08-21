@@ -2,7 +2,7 @@
 
 import json
 from dataclasses import asdict
-from typing import Dict, Any, Set
+from typing import Dict, Any
 
 from .analyzer import GitLogAnalyzer
 
@@ -13,7 +13,14 @@ class GitTools:
     def __init__(self, repo_path: str = "."):
         """Initialize GitTools with repository path."""
         self.repo_path = repo_path
-        self.analyzer = GitLogAnalyzer(repo_path)
+        self._analyzer = None
+
+    @property
+    def analyzer(self):
+        """Get or create the analyzer instance."""
+        if self._analyzer is None:
+            self._analyzer = GitLogAnalyzer(self.repo_path)
+        return self._analyzer
 
     def generate_merge_request_summary(
         self,
@@ -26,7 +33,7 @@ class GitTools:
         try:
             # Update analyzer repo path if specified
             if repo_path != "." and repo_path != self.repo_path:
-                self.analyzer = GitLogAnalyzer(repo_path)
+                self._analyzer = GitLogAnalyzer(repo_path)
                 self.repo_path = repo_path
 
             # Get commits and generate summary
@@ -50,7 +57,7 @@ class GitTools:
         try:
             # Update analyzer repo path if specified
             if repo_path != "." and repo_path != self.repo_path:
-                self.analyzer = GitLogAnalyzer(repo_path)
+                self._analyzer = GitLogAnalyzer(repo_path)
                 self.repo_path = repo_path
 
             # Get commits

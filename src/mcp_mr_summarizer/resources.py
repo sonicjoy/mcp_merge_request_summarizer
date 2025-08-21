@@ -14,7 +14,14 @@ class GitResources:
     def __init__(self, repo_path: str = "."):
         """Initialize GitResources with repository path."""
         self.repo_path = repo_path
-        self.analyzer = GitLogAnalyzer(repo_path)
+        self._analyzer = None
+
+    @property
+    def analyzer(self):
+        """Get or create the analyzer instance."""
+        if self._analyzer is None:
+            self._analyzer = GitLogAnalyzer(self.repo_path)
+        return self._analyzer
 
     def get_repo_status(self) -> str:
         """Get current repository status and basic information."""

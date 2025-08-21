@@ -36,12 +36,20 @@ Get the MCP Merge Request Summarizer up and running in minutes!
 
 ### Cursor Setup (30 seconds)
 1. Open Cursor Settings (Ctrl + ,)
-2. Search for "mcp"
-3. Click "Edit in settings.json"
-4. Copy this into your settings.json:
+2. Go to **Tools & Integrations**
+3. Click **New MCP Server**
+4. Add this configuration:
+   - **Name:** `merge-request-summarizer`
+   - **Command:** `python`
+   - **Arguments:** `["-m", "mcp_mr_summarizer.server"]`
+5. Click **Save**
+6. Restart Cursor
+
+**Alternative JSON Configuration:**
+If you prefer to edit settings.json directly:
 ```json
 {
-    "mcp.servers": {
+    "mcpServers": {
         "merge-request-summarizer": {
             "command": "python",
             "args": ["-m", "mcp_mr_summarizer.server"]
@@ -49,7 +57,6 @@ Get the MCP Merge Request Summarizer up and running in minutes!
     }
 }
 ```
-5. Restart Cursor
 
 ### Claude Desktop Setup (30 seconds)
 1. Open Claude Desktop
@@ -120,6 +127,14 @@ You can also access git data directly:
 **Python version issues?**
 - This tool requires Python 3.10 or higher
 - Check your version: `python --version`
+
+**MCP not found in Cursor/VSCode?**
+- Make sure you're using the correct configuration format
+- **VSCode uses:** `mcp.servers` (with dot)
+- **Cursor uses:** `mcpServers` (capital S) or the GUI interface
+- The MCP server works from any directory once installed
+- Try copying the exact configuration from the `configs/` folder
+- Check that the package is installed: `pip list | findstr mcp-merge-request-summarizer`
 
 **Still having issues?**
 - Check the full `README.md` for detailed troubleshooting
