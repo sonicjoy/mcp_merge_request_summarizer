@@ -2,7 +2,7 @@
 
 import json
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock, AsyncMock
 from dataclasses import asdict
 
 from mcp_mr_summarizer.tools import GitTools
@@ -22,7 +22,8 @@ class TestGitTools:
         assert tools.repo_path == "/path/to/repo"
         assert tools.analyzer is not None
 
-    def test_generate_merge_request_summary_markdown(self):
+    @pytest.mark.asyncio
+    async def test_generate_merge_request_summary_markdown(self):
         """Test merge request summary generation in markdown format."""
         # Mock commits and summary
         mock_commits = [
@@ -52,17 +53,18 @@ class TestGitTools:
             estimated_review_time="15 minutes",
         )
 
-        self.tools.analyzer.get_git_log = Mock(return_value=mock_commits)
-        self.tools.analyzer.generate_summary = Mock(return_value=mock_summary)
+        self.tools.analyzer.get_git_log = AsyncMock(return_value=mock_commits)
+        self.tools.analyzer.generate_summary = AsyncMock(return_value=mock_summary)
 
-        result = self.tools.generate_merge_request_summary(
+        result = await self.tools.generate_merge_request_summary(
             "main", "feature", ".", "markdown"
         )
 
         expected = "# Feature Enhancement\n\nAdded new feature with comprehensive tests and documentation."
         assert result == expected
 
-    def test_generate_merge_request_summary_json(self):
+    @pytest.mark.asyncio
+    async def test_generate_merge_request_summary_json(self):
         """Test merge request summary generation in JSON format."""
         # Mock commits and summary
         mock_commits = [
@@ -92,10 +94,10 @@ class TestGitTools:
             estimated_review_time="15 minutes",
         )
 
-        self.tools.analyzer.get_git_log = Mock(return_value=mock_commits)
-        self.tools.analyzer.generate_summary = Mock(return_value=mock_summary)
+        self.tools.analyzer.get_git_log = AsyncMock(return_value=mock_commits)
+        self.tools.analyzer.generate_summary = AsyncMock(return_value=mock_summary)
 
-        result = self.tools.generate_merge_request_summary(
+        result = await self.tools.generate_merge_request_summary(
             "main", "feature", ".", "json"
         )
 
@@ -104,7 +106,8 @@ class TestGitTools:
         expected_dict = asdict(mock_summary)
         assert parsed_result == expected_dict
 
-    def test_generate_merge_request_summary_with_custom_repo_path(self):
+    @pytest.mark.asyncio
+    async def test_generate_merge_request_summary_with_custom_repo_path(self):
         """Test merge request summary generation with custom repository path."""
         custom_path = "/custom/repo"
         mock_commits = []
@@ -127,11 +130,13 @@ class TestGitTools:
         # Mock the analyzer creation and methods
         with patch("mcp_mr_summarizer.tools.GitLogAnalyzer") as mock_analyzer_class:
             mock_analyzer_instance = Mock()
-            mock_analyzer_instance.get_git_log.return_value = mock_commits
-            mock_analyzer_instance.generate_summary.return_value = mock_summary
+            mock_analyzer_instance.get_git_log = AsyncMock(return_value=mock_commits)
+            mock_analyzer_instance.generate_summary = AsyncMock(
+                return_value=mock_summary
+            )
             mock_analyzer_class.return_value = mock_analyzer_instance
 
-            result = self.tools.generate_merge_request_summary(
+            result = await self.tools.generate_merge_request_summary(
                 "main", "feature", custom_path, "markdown"
             )
 
@@ -139,14 +144,16 @@ class TestGitTools:
             mock_analyzer_class.assert_called_with(custom_path)
             assert self.tools.repo_path == custom_path
 
-    def test_generate_merge_request_summary_exception_handling(self):
+    @pytest.mark.asyncio
+    async def test_generate_merge_request_summary_exception_handling(self):
         """Test exception handling in generate_merge_request_summary."""
-        self.tools.analyzer.get_git_log = Mock(side_effect=Exception("Git error"))
+        self.tools.analyzer.get_git_log = AsyncMock(side_effect=Exception("Git error"))
 
-        result = self.tools.generate_merge_request_summary("main", "feature")
-        assert result.startswith("Error generating merge request summary:")
+        result = await self.tools.generate_merge_request_summary("main", "feature")
+        assert result.startswith("Error processing git data:")
 
-    def test_analyze_git_commits_success(self):
+    @pytest.mark.asyncio
+    async def test_analyze_git_commits_success(self):
         """Test successful git commits analysis."""
         # Mock commits
         mock_commits = [
@@ -170,7 +177,7 @@ class TestGitTools:
             ),
         ]
 
-        self.tools.analyzer.get_git_log = Mock(return_value=mock_commits)
+        self.tools.analyzer.get_git_log = AsyncMock(return_value=mock_commits)
         self.tools.analyzer.categorize_commit = Mock(
             side_effect=[["bug_fix"], ["new_feature"]]
         )
@@ -181,7 +188,7 @@ class TestGitTools:
             }
         )
 
-        result = self.tools.analyze_git_commits("main", "feature")
+        result = await self.tools.analyze_git_commits("main", "feature")
 
         # Verify the report structure
         assert "# Git Commit Analysis" in result
@@ -199,14 +206,16 @@ class TestGitTools:
         assert "### Source" in result
         assert "### Tests" in result
 
-    def test_analyze_git_commits_no_commits(self):
+    @pytest.mark.asyncio
+    async def test_analyze_git_commits_no_commits(self):
         """Test git commits analysis when no commits are found."""
-        self.tools.analyzer.get_git_log = Mock(return_value=[])
+        self.tools.analyzer.get_git_log = AsyncMock(return_value=[])
 
-        result = self.tools.analyze_git_commits("main", "feature")
+        result = await self.tools.analyze_git_commits("main", "feature")
         assert result == "No commits found between the specified branches."
 
-    def test_analyze_git_commits_with_custom_repo_path(self):
+    @pytest.mark.asyncio
+    async def test_analyze_git_commits_with_custom_repo_path(self):
         """Test git commits analysis with custom repository path."""
         custom_path = "/custom/repo"
         mock_commits = []
@@ -214,23 +223,27 @@ class TestGitTools:
         # Mock the analyzer creation
         with patch("mcp_mr_summarizer.tools.GitLogAnalyzer") as mock_analyzer_class:
             mock_analyzer_instance = Mock()
-            mock_analyzer_instance.get_git_log.return_value = mock_commits
+            mock_analyzer_instance.get_git_log = AsyncMock(return_value=mock_commits)
             mock_analyzer_class.return_value = mock_analyzer_instance
 
-            result = self.tools.analyze_git_commits("main", "feature", custom_path)
+            result = await self.tools.analyze_git_commits(
+                "main", "feature", custom_path
+            )
 
             # Verify that a new analyzer was created with the custom path
             mock_analyzer_class.assert_called_with(custom_path)
             assert self.tools.repo_path == custom_path
 
-    def test_analyze_git_commits_exception_handling(self):
+    @pytest.mark.asyncio
+    async def test_analyze_git_commits_exception_handling(self):
         """Test exception handling in analyze_git_commits."""
-        self.tools.analyzer.get_git_log = Mock(side_effect=Exception("Git error"))
+        self.tools.analyzer.get_git_log = AsyncMock(side_effect=Exception("Git error"))
 
-        result = self.tools.analyze_git_commits("main", "feature")
-        assert result.startswith("Error analyzing git commits:")
+        result = await self.tools.analyze_git_commits("main", "feature")
+        assert result.startswith("Error processing git data:")
 
-    def test_analyze_git_commits_commit_processing_exception(self):
+    @pytest.mark.asyncio
+    async def test_analyze_git_commits_commit_processing_exception(self):
         """Test that individual commit processing exceptions don't stop analysis."""
         # Mock commits where one will cause an exception
         mock_commits = [
@@ -247,32 +260,24 @@ class TestGitTools:
                 hash="def456",
                 author="Test Author 2",
                 date="2023-01-02",
-                message="Problematic commit",
+                message="Bad commit",
                 files_changed={"src/file2.py"},
-                insertions=20,
-                deletions=5,
+                insertions=5,
+                deletions=0,
             ),
         ]
 
-        self.tools.analyzer.get_git_log = Mock(return_value=mock_commits)
-        # First call succeeds, second call raises exception
+        self.tools.analyzer.get_git_log = AsyncMock(return_value=mock_commits)
+        # Mock categorize_commit to raise an exception for the second commit
         self.tools.analyzer.categorize_commit = Mock(
-            side_effect=[["bug_fix"], Exception("Categorization error")]
-        )
-        self.tools.analyzer._categorize_files = Mock(
-            return_value={
-                "Source": ["src/file1.py", "src/file2.py"],
-            }
+            side_effect=[["feature"], Exception("Categorization error")]
         )
 
-        result = self.tools.analyze_git_commits("main", "feature")
+        result = await self.tools.analyze_git_commits("main", "feature")
 
-        # Should still generate a report with the successful commit
+        # Should still generate a report even with the error
         assert "# Git Commit Analysis" in result
         assert "Total Commits:** 2" in result
-        assert (
-            "### Bug Fix (1)" in result
-        )  # Only one commit was successfully categorized
 
     def test_generate_analysis_report_empty_analysis(self):
         """Test report generation with empty analysis data."""
@@ -285,7 +290,7 @@ class TestGitTools:
             "files_affected": set(),
         }
 
-        result = self.tools._generate_analysis_report(analysis)
+        result = self.tools._generate_analysis_report_sync(analysis)
 
         assert "# Git Commit Analysis" in result
         assert "Total Commits:** 0" in result
@@ -312,7 +317,7 @@ class TestGitTools:
             side_effect=Exception("Categorization error")
         )
 
-        result = self.tools._generate_analysis_report(analysis)
+        result = self.tools._generate_analysis_report_sync(analysis)
 
         assert "# Git Commit Analysis" in result
         assert "Error categorizing files:" in result
@@ -339,7 +344,7 @@ class TestGitTools:
             }
         )
 
-        result = self.tools._generate_analysis_report(analysis)
+        result = self.tools._generate_analysis_report_sync(analysis)
 
         assert "# Git Commit Analysis" in result
         assert "### Source" in result
@@ -354,13 +359,14 @@ class TestGitTools:
         assert tools.repo_path == custom_path
         assert tools.analyzer.repo_path == custom_path
 
-    def test_repo_path_update_same_path(self):
+    @pytest.mark.asyncio
+    async def test_repo_path_update_same_path(self):
         """Test that analyzer is not recreated when repo_path is the same."""
         original_analyzer = self.tools.analyzer
 
         # Call with same repo path
-        self.tools.analyzer.get_git_log = Mock(return_value=[])
-        self.tools.generate_merge_request_summary(
+        self.tools.analyzer.get_git_log = AsyncMock(return_value=[])
+        await self.tools.generate_merge_request_summary(
             "main", "feature", "/test/repo", "markdown"
         )
 

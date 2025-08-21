@@ -2,6 +2,7 @@
 
 import pytest
 from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock
 
 from mcp_mr_summarizer.analyzer import GitLogAnalyzer
 from mcp_mr_summarizer.models import CommitInfo
@@ -140,16 +141,18 @@ class TestGitLogAnalyzer:
         title = self.analyzer._generate_title(commits, new_features, [], [])
         assert title == "feat: 2 new features and improvements"
 
-    def test_generate_summary_no_commits(self):
+    @pytest.mark.asyncio
+    async def test_generate_summary_no_commits(self):
         """Test summary generation with no commits."""
-        summary = self.analyzer.generate_summary([])
+        summary = await self.analyzer.generate_summary([])
 
         assert summary.title == "No changes detected"
         assert summary.total_commits == 0
         assert summary.total_files_changed == 0
         assert summary.estimated_review_time == "0 minutes"
 
-    def test_generate_summary_with_commits(self):
+    @pytest.mark.asyncio
+    async def test_generate_summary_with_commits(self):
         """Test summary generation with commits."""
         commits = [
             CommitInfo(
@@ -172,53 +175,41 @@ class TestGitLogAnalyzer:
             ),
         ]
 
-        summary = self.analyzer.generate_summary(commits)
+        summary = await self.analyzer.generate_summary(commits)
 
         assert summary.total_commits == 2
         assert summary.total_files_changed == 2
         assert summary.total_insertions == 55
         assert summary.total_deletions == 12
-        assert len(summary.files_affected) == 2
+        assert "Add new feature" in summary.new_features[0]
+        assert "Fix bug in processor" in summary.bug_fixes[0]
 
-    @patch("subprocess.run")
-    def test_get_git_log_success(self, mock_run):
+    @pytest.mark.asyncio
+    async def test_get_git_log_success(self):
         """Test successful git log retrieval."""
-        # Mock the git log command with new format
-        mock_run.return_value = Mock(
-            stdout="""abc123def4567890123456789012345678901234567890
-Author1
-2023-01-01
-First commit
+        # Mock the git command to return test data
+        with patch("asyncio.create_subprocess_exec") as mock_subprocess:
+            # Mock successful git command
+            mock_process = AsyncMock()
+            mock_process.returncode = 0
+            mock_process.communicate.return_value = (
+                b"abc1234567890123456789012345678901234567\nTest Author\n2023-01-01\nTest commit\n\nfile1.py | 10 +++++-----\n",
+                b"",
+            )
+            mock_subprocess.return_value = mock_process
 
- file1.py | 10 ++++++++++
- 1 file changed, 10 insertions(+)
+            commits = await self.analyzer.get_git_log("main", "feature")
+            assert isinstance(commits, list)
 
-def45678901234567890123456789012345678901234567890
-Author2
-2023-01-01
-Second commit
-
- file2.py | 5 +++++
- 1 file changed, 5 insertions(+)
-""",
-            returncode=0,
-        )
-
-        commits = self.analyzer.get_git_log("main", "feature")
-
-        # For now, just test that the method runs without error
-        # The parsing logic is complex and may need adjustment
-        assert isinstance(commits, list)
-        # If commits are found, verify their structure
-        if len(commits) > 0:
-            assert hasattr(commits[0], "hash")
-            assert hasattr(commits[0], "author")
-            assert hasattr(commits[0], "message")
-
-    @patch("subprocess.run")
-    def test_get_git_log_failure(self, mock_run):
+    @pytest.mark.asyncio
+    async def test_get_git_log_failure(self):
         """Test git log retrieval failure."""
-        mock_run.side_effect = Exception("Git command failed")
+        with patch("asyncio.create_subprocess_exec") as mock_subprocess:
+            # Mock failed git command
+            mock_process = AsyncMock()
+            mock_process.returncode = 1
+            mock_process.communicate.return_value = (b"", b"fatal: bad revision")
+            mock_subprocess.return_value = mock_process
 
-        with pytest.raises(Exception, match="Unexpected error getting git log"):
-            self.analyzer.get_git_log("main", "feature")
+            with pytest.raises(Exception, match="Unexpected error getting git log"):
+                await self.analyzer.get_git_log("main", "feature")

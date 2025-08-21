@@ -58,7 +58,8 @@ dev = [
 test = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
-    "pytest-mock>=3.10.0"
+    "pytest-mock>=3.10.0",
+    "pytest-asyncio>=0.21.0"
 ]
 
 [project.urls]
@@ -129,12 +130,14 @@ addopts = [
     "--strict-markers",
     "--strict-config",
     "--verbose",
-    "--tb=short"
+    "--tb=short",
+    "--asyncio-mode=auto"
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests"
 ]
+asyncio_mode = "auto"
 
 [tool.coverage.run]
 source = ["src/mcp_mr_summarizer"]
@@ -154,4 +157,9 @@ exclude_lines = [
     "raise NotImplementedError",
     "if 0:",
     "if __name__ == .__main__.:"
+]
+
+[dependency-groups]
+dev = [
+    "pytest-asyncio>=1.1.0",
 ]
