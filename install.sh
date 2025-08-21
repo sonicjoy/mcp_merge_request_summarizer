@@ -31,5 +31,5 @@ echo
 echo "Next steps:"
 echo "1. Configure your MCP client (VSCode/Cursor) using the config files in the 'configs' folder"
 echo "2. Restart your editor"
-echo "3. Test the installation by running: mcp-mr-summarizer --help"
+echo "3. Test the installation by running: python -m mcp_mr_summarizer.cli --help"
 echo

@@ -40,6 +40,6 @@ Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Cyan
 Write-Host "1. Configure your MCP client (VSCode/Cursor) using the config files in the 'configs' folder" -ForegroundColor White
 Write-Host "2. Restart your editor" -ForegroundColor White
-Write-Host "3. Test the installation by running: mcp-mr-summarizer --help" -ForegroundColor White
+Write-Host "3. Test the installation by running: python -m mcp_mr_summarizer.cli --help" -ForegroundColor White
 Write-Host ""
 Read-Host "Press Enter to continue"

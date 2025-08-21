@@ -37,11 +37,12 @@ classifiers = [
     "Topic :: Software Development :: Version Control :: Git",
     "Topic :: Text Processing :: Markup :: Markdown"
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dependencies = [
     "gitpython>=3.1.0",
     "click>=8.0.0",
-    "rich>=13.0.0"
+    "rich>=13.0.0",
+    "mcp>=1.13.0"
 ]
 
 [project.optional-dependencies]

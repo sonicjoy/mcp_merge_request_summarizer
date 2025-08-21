@@ -84,9 +84,17 @@ mcp-mr-summarizer --help
    }
    ```
 
-2. **Use the tools** through your MCP client interface:
-   - `generate_merge_request_summary`: Creates full MR summaries
-   - `analyze_git_commits`: Provides detailed commit analysis
+2. **Use the tools and resources** through your MCP client interface:
+
+### Tools (Actions)
+- `generate_merge_request_summary`: Creates full MR summaries
+- `analyze_git_commits`: Provides detailed commit analysis
+
+### Resources (Data)
+- `git://repo/status`: Current repository status and information
+- `git://commits/{base_branch}..{current_branch}`: Commit history between branches
+- `git://branches`: List of all repository branches
+- `git://files/changed/{base_branch}..{current_branch}`: Files changed between branches
 
 ## 📊 Example Output
 

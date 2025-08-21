@@ -59,9 +59,29 @@ Get the MCP Merge Request Summarizer up and running in minutes!
 
 ## 🎯 First Use
 
+### Tools (Actions)
 1. In your editor, ask the AI: "Generate a merge request summary for my current branch"
 2. The AI will use the MCP tool to analyze your git history
 3. You'll get a comprehensive merge request summary!
+
+### Resources (Data)
+You can also access git data directly:
+- "Show me the repository status"
+- "List all branches in this repository"
+- "Show me the commit history between develop and main"
+- "What files have changed between these branches?"
+
+## 📋 Available Tools and Resources
+
+### Tools
+- **`generate_merge_request_summary`** - Generate comprehensive merge request summaries
+- **`analyze_git_commits`** - Analyze git commits and categorize them by type
+
+### Resources
+- **`git://repo/status`** - Current repository status and information
+- **`git://commits/{base}..{current}`** - Commit history between branches
+- **`git://branches`** - List of all repository branches
+- **`git://files/changed/{base}..{current}`** - Files changed between branches
 
 ## 🆘 Need Help?
 
