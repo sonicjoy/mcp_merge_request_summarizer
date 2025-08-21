@@ -17,8 +17,8 @@ chmod +x install.sh && ./install.sh
 {
     "mcp.servers": {
         "merge-request-summarizer": {
-            "command": "mcp-mr-summarizer-server",
-            "args": []
+            "command": "python",
+            "args": ["-m", "mcp_mr_summarizer.server"]
         }
     }
 }
@@ -29,8 +29,8 @@ chmod +x install.sh && ./install.sh
 {
     "mcpServers": {
         "merge-request-summarizer": {
-            "command": "mcp-mr-summarizer-server",
-            "args": []
+            "command": "python",
+            "args": ["-m", "mcp_mr_summarizer.server"]
         }
     }
 }
@@ -40,32 +40,32 @@ chmod +x install.sh && ./install.sh
 
 ### Basic Usage
 ```bash
-# Generate summary for current branch vs main
-mcp-mr-summarizer
+# Generate summary for current branch vs develop
+python -m mcp_mr_summarizer.cli
 
 # Specify custom branches
-mcp-mr-summarizer --base develop --current feature/new-feature
+python -m mcp_mr_summarizer.cli --base develop --current feature/new-feature
 
 # Output to file
-mcp-mr-summarizer --output mr_summary.md
+python -m mcp_mr_summarizer.cli --output mr_summary.md
 
 # JSON format
-mcp-mr-summarizer --format json --output summary.json
+python -m mcp_mr_summarizer.cli --format json --output summary.json
 ```
 
 ### Advanced Usage
 ```bash
 # Include all commits (not just merge commits)
-mcp-mr-summarizer --all-commits
+python -m mcp_mr_summarizer.cli --all-commits
 
 # Custom commit range
-mcp-mr-summarizer --since "2024-01-01" --until "2024-01-31"
+python -m mcp_mr_summarizer.cli --since "2024-01-01" --until "2024-01-31"
 
 # Verbose output
-mcp-mr-summarizer --verbose
+python -m mcp_mr_summarizer.cli --verbose
 
 # Help
-mcp-mr-summarizer --help
+python -m mcp_mr_summarizer.cli --help
 ```
 
 ## AI Integration Examples
@@ -158,6 +158,9 @@ pip list | grep mcp-merge-request-summarizer
 
 # Reinstall if needed
 pip install -e .
+
+# Use module approach instead
+python -m mcp_mr_summarizer.cli --help
 ```
 
 **2. Python path issues**
@@ -182,3 +185,57 @@ chmod +x install.sh
 - Restart your editor after configuration
 - Check JSON syntax in settings
 - Verify the command path is correct
+
+**5. Python version issues**
+```bash
+# Check Python version (requires 3.10+)
+python --version
+
+# Upgrade if necessary
+# On Ubuntu/Debian:
+sudo apt update && sudo apt install python3.10
+
+# On macOS with Homebrew:
+brew install python@3.10
+```
+
+## Development Examples
+
+### Running Tests
+```bash
+# Run all tests
+python -m pytest tests/
+
+# Run with coverage
+python -m pytest tests/ --cov=mcp_mr_summarizer --cov-report=html
+
+# Run specific test file
+python -m pytest tests/test_analyzer.py -v
+```
+
+### Code Quality Checks
+```bash
+# Format code
+black src/ tests/
+isort src/ tests/
+
+# Lint code
+flake8 src/ tests/
+mypy src/
+
+# Run all checks
+make check
+```
+
+### Building and Publishing
+```bash
+# Build package
+python -m build
+
+# Upload to PyPI
+python -m twine upload dist/*
+
+# Or use Makefile
+make build
+make upload
+```

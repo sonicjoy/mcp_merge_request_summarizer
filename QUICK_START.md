@@ -51,6 +51,22 @@ Get the MCP Merge Request Summarizer up and running in minutes!
 ```
 5. Restart Cursor
 
+### Claude Desktop Setup (30 seconds)
+1. Open Claude Desktop
+2. Go to Settings → MCP Servers
+3. Add new server with this configuration:
+```json
+{
+    "mcpServers": {
+        "merge-request-summarizer": {
+            "command": "python",
+            "args": ["-m", "mcp_mr_summarizer.server"]
+        }
+    }
+}
+```
+4. Restart Claude Desktop
+
 ## ✅ Test Your Installation
 
 1. Open a terminal in your git repository
@@ -94,11 +110,16 @@ You can also access git data directly:
 **"Command not found" error?**
 - Make sure you ran the installation script
 - Try: `pip list | grep mcp-merge-request-summarizer`
+- Use: `python -m mcp_mr_summarizer.server` instead
 
 **Editor not recognizing the MCP?**
 - Restart your editor after configuration
 - Check that the JSON syntax is correct
 - Verify the command path in your settings
+
+**Python version issues?**
+- This tool requires Python 3.10 or higher
+- Check your version: `python --version`
 
 **Still having issues?**
 - Check the full `README.md` for detailed troubleshooting

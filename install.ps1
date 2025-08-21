@@ -9,7 +9,7 @@ try {
     Write-Host "Found Python: $pythonVersion" -ForegroundColor Green
 } catch {
     Write-Host "Error: Python is not installed or not in PATH" -ForegroundColor Red
-    Write-Host "Please install Python 3.8 or higher from https://python.org" -ForegroundColor Yellow
+    Write-Host "Please install Python 3.10 or higher from https://python.org" -ForegroundColor Yellow
     Read-Host "Press Enter to exit"
     exit 1
 }

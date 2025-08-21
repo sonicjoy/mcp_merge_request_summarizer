@@ -157,9 +157,14 @@ venv\Scripts\activate     # Windows
 pip install -e .
 ```
 
+**6. Python version issues**
+- This tool requires Python 3.10 or higher
+- Check your version: `python --version`
+- Upgrade if necessary
+
 ## 📋 System Requirements
 
-- Python 3.8 or higher
+- Python 3.10 or higher
 - Git (for git operations)
 - pip (for package installation)
 

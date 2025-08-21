@@ -54,33 +54,30 @@ pip install mcp-merge-request-summarizer
 
 ```bash
 # Basic usage (compares current branch against develop)
-mcp-mr-summarizer
+python -m mcp_mr_summarizer.cli
 
 # Specify different branches
-mcp-mr-summarizer --base main --current feature/new-feature
+python -m mcp_mr_summarizer.cli --base main --current feature/new-feature
 
 # Output to file
-mcp-mr-summarizer --output mr_summary.md
+python -m mcp_mr_summarizer.cli --output mr_summary.md
 
 # JSON output
-mcp-mr-summarizer --format json --output summary.json
+python -m mcp_mr_summarizer.cli --format json --output summary.json
 
 # Help
-mcp-mr-summarizer --help
+python -m mcp_mr_summarizer.cli --help
 ```
 
 ### As an MCP Server
 
-1. **Configure your MCP client** (e.g., Claude Desktop, Cursor):
+1. **Configure your MCP client** (e.g., Claude Desktop, Cursor, VSCode):
    ```json
    {
-     "mcpServers": {
+     "mcp.servers": {
        "merge-request-summarizer": {
          "command": "python",
-         "args": ["/path/to/mcp-merge-request-summarizer/src/mcp_mr_summarizer/server.py"],
-         "env": {
-           "PYTHONPATH": "/path/to/mcp-merge-request-summarizer/src"
-         }
+         "args": ["-m", "mcp_mr_summarizer.server"]
        }
      }
    }
