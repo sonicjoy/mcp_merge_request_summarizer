@@ -8,7 +8,7 @@ from .tools import GitTools
 from .resources import GitResources
 
 
-def main() -> None:
+async def main() -> None:
     """Main function for command-line usage."""
     parser = argparse.ArgumentParser(
         description="MCP Merge Request Summarizer - Git analysis tools and resources",
@@ -105,12 +105,12 @@ def main() -> None:
     try:
         if args.command == "summary":
             tools = GitTools(args.repo)
-            output = tools.generate_merge_request_summary(
+            output = await tools.generate_merge_request_summary(
                 args.base, args.current, args.repo, args.format
             )
         elif args.command == "analyze":
             tools = GitTools(args.repo)
-            output = tools.analyze_git_commits(args.base, args.current, args.repo)
+            output = await tools.analyze_git_commits(args.base, args.current, args.repo)
         elif args.command == "status":
             resources = GitResources(args.repo)
             output = resources.get_repo_status()
