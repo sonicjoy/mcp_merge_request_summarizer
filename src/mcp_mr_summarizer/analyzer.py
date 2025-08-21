@@ -55,7 +55,9 @@ class GitLogAnalyzer:
                 "--date=short",
             ]
 
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, check=True, timeout=30
+            )
             output = result.stdout.strip()
 
             if not output:
@@ -64,8 +66,12 @@ class GitLogAnalyzer:
             commits = []
             lines = output.split("\n")
             i = 0
+            max_iterations = len(lines) * 2  # Safety limit
+            iteration_count = 0
 
-            while i < len(lines):
+            while i < len(lines) and iteration_count < max_iterations:
+                iteration_count += 1
+
                 # Look for commit hash (40 characters)
                 if len(lines[i]) == 40 and all(
                     c in "0123456789abcdef" for c in lines[i].lower()
@@ -129,12 +135,17 @@ class GitLogAnalyzer:
                         )
                         commits.append(commit_info)
 
-                        # Move to next commit
-                        i = j
+                        # Move to next commit - ensure we always advance
+                        i = max(j, i + 1)
                     else:
                         i += 1
                 else:
                     i += 1
+
+            if iteration_count >= max_iterations:
+                print(
+                    f"Warning: Git log parsing reached maximum iterations ({max_iterations})"
+                )
 
             return commits
 

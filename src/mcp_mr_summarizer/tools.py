@@ -3,6 +3,7 @@
 import json
 from dataclasses import asdict
 from typing import Dict, Any
+import subprocess
 
 from .analyzer import GitLogAnalyzer
 
@@ -36,14 +37,27 @@ class GitTools:
                 self._analyzer = GitLogAnalyzer(repo_path)
                 self.repo_path = repo_path
 
-            # Get commits and generate summary
-            commits = self.analyzer.get_git_log(base_branch, current_branch)
-            summary = self.analyzer.generate_summary(commits)
+            # Get commits and generate summary with timeout protection
+            try:
+                commits = self.analyzer.get_git_log(base_branch, current_branch)
+                if not commits:
+                    return (
+                        f"No commits found between {base_branch} and {current_branch}."
+                    )
 
-            if format == "json":
-                return json.dumps(asdict(summary), indent=2)
-            else:
-                return f"# {summary.title}\n\n{summary.description}"
+                summary = self.analyzer.generate_summary(commits)
+
+                if format == "json":
+                    return json.dumps(asdict(summary), indent=2)
+                else:
+                    return f"# {summary.title}\n\n{summary.description}"
+            except subprocess.TimeoutExpired:
+                return f"Error: Git operation timed out. Please check if the repository is accessible and the branches exist."
+            except subprocess.CalledProcessError as e:
+                return f"Error: Git command failed: {e.stderr.decode() if e.stderr else str(e)}"
+            except Exception as e:
+                return f"Error processing git data: {str(e)}"
+
         except Exception as e:
             return f"Error generating merge request summary: {str(e)}"
 
@@ -60,53 +74,61 @@ class GitTools:
                 self._analyzer = GitLogAnalyzer(repo_path)
                 self.repo_path = repo_path
 
-            # Get commits
-            commits = self.analyzer.get_git_log(base_branch, current_branch)
+            # Get commits with timeout protection
+            try:
+                commits = self.analyzer.get_git_log(base_branch, current_branch)
 
-            if not commits:
-                return "No commits found between the specified branches."
+                if not commits:
+                    return "No commits found between the specified branches."
 
-            # Analyze commits
-            analysis = {
-                "total_commits": len(commits),
-                "total_insertions": sum(c.insertions for c in commits),
-                "total_deletions": sum(c.deletions for c in commits),
-                "categories": {},
-                "significant_changes": [],
-                "files_affected": set(),
-            }
+                # Analyze commits
+                analysis = {
+                    "total_commits": len(commits),
+                    "total_insertions": sum(c.insertions for c in commits),
+                    "total_deletions": sum(c.deletions for c in commits),
+                    "categories": {},
+                    "significant_changes": [],
+                    "files_affected": set(),
+                }
 
-            for commit in commits:
-                try:
-                    categories = self.analyzer.categorize_commit(commit)
-                    for category in categories:
-                        if category not in analysis["categories"]:
-                            analysis["categories"][category] = []
-                        analysis["categories"][category].append(
-                            {
-                                "hash": commit.hash[:8],
-                                "message": commit.message,
-                                "insertions": commit.insertions,
-                                "deletions": commit.deletions,
-                            }
-                        )
+                for commit in commits:
+                    try:
+                        categories = self.analyzer.categorize_commit(commit)
+                        for category in categories:
+                            if category not in analysis["categories"]:
+                                analysis["categories"][category] = []
+                            analysis["categories"][category].append(
+                                {
+                                    "hash": commit.hash[:8],
+                                    "message": commit.message,
+                                    "insertions": commit.insertions,
+                                    "deletions": commit.deletions,
+                                }
+                            )
 
-                    analysis["files_affected"].update(commit.files_changed)
+                        analysis["files_affected"].update(commit.files_changed)
 
-                    # Significant changes (more than 100 lines)
-                    if commit.insertions + commit.deletions > 100:
-                        analysis["significant_changes"].append(
-                            {
-                                "hash": commit.hash[:8],
-                                "message": commit.message,
-                                "total_lines": commit.insertions + commit.deletions,
-                            }
-                        )
-                except Exception as e:
-                    # Continue processing other commits even if one fails
-                    continue
+                        # Significant changes (more than 100 lines)
+                        if commit.insertions + commit.deletions > 100:
+                            analysis["significant_changes"].append(
+                                {
+                                    "hash": commit.hash[:8],
+                                    "message": commit.message,
+                                    "total_lines": commit.insertions + commit.deletions,
+                                }
+                            )
+                    except Exception as e:
+                        # Continue processing other commits even if one fails
+                        continue
 
-            return self._generate_analysis_report(analysis)
+                return self._generate_analysis_report(analysis)
+
+            except subprocess.TimeoutExpired:
+                return f"Error: Git operation timed out. Please check if the repository is accessible and the branches exist."
+            except subprocess.CalledProcessError as e:
+                return f"Error: Git command failed: {e.stderr.decode() if e.stderr else str(e)}"
+            except Exception as e:
+                return f"Error processing git data: {str(e)}"
 
         except Exception as e:
             return f"Error analyzing git commits: {str(e)}"
