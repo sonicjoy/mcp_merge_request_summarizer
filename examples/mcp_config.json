@@ -1,0 +1,13 @@
+{
+    "mcpServers": {
+        "merge-request-summarizer": {
+            "command": "python",
+            "args": [
+                "/path/to/mcp-merge-request-summarizer/src/mcp_mr_summarizer/server.py"
+            ],
+            "env": {
+                "PYTHONPATH": "/path/to/mcp-merge-request-summarizer/src"
+            }
+        }
+    }
+}
