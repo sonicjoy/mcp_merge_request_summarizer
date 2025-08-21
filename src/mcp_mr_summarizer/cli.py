@@ -3,7 +3,7 @@
 import argparse
 import json
 import sys
-
+import asyncio
 from .tools import GitTools
 from .resources import GitResources
 
@@ -140,4 +140,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

@@ -1,10 +1,8 @@
 """Git log analyzer for generating merge request summaries."""
 
 import re
-import subprocess
 import time
 import sys
-import signal
 import asyncio
 from typing import Dict, List, Optional, Set, Iterator, Tuple
 from dataclasses import dataclass
