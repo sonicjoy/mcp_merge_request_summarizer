@@ -41,10 +41,12 @@ cd mcp-merge-request-summarizer
 pip install -e .
 ```
 
-### From PyPI (when published)
+### From PyPI
 ```bash
 pip install mcp-merge-request-summarizer
 ```
+
+**Note**: This package is not yet published to PyPI. For now, use the installation scripts or manual installation.
 
 ## 🔧 Usage
 
