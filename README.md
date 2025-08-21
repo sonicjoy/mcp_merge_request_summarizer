@@ -19,14 +19,29 @@ An MCP (Model Context Protocol) tool that automatically generates comprehensive 
 
 ## 📦 Installation
 
-### Option 1: Direct Installation
+### 🚀 Quick Start (Recommended)
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/yourusername/mcp-merge-request-summarizer.git
+   cd mcp-merge-request-summarizer
+   ```
+
+2. **Run the installation script:**
+   - **Windows:** Double-click `install.bat` or run `install.bat` in PowerShell
+   - **Mac/Linux:** Run `chmod +x install.sh && ./install.sh`
+
+3. **Configure your editor:**
+   - See `QUICK_START.md` for 30-second setup instructions
+   - Or check `configs/README.md` for detailed configuration options
+
+### Manual Installation
 ```bash
 git clone https://github.com/yourusername/mcp-merge-request-summarizer.git
 cd mcp-merge-request-summarizer
 pip install -e .
 ```
 
-### Option 2: From PyPI (when published)
+### From PyPI (when published)
 ```bash
 pip install mcp-merge-request-summarizer
 ```
@@ -106,31 +121,46 @@ This merge request contains 9 commits with 35 files changed (1543 insertions, 14
 
 ## 🛠️ Configuration
 
-### MCP Client Configuration
+### Quick Configuration (Recommended)
 
-**Claude Desktop:**
-```json
-{
-  "mcpServers": {
-    "merge-request-summarizer": {
-      "command": "python",
-      "args": ["/path/to/mcp-merge-request-summarizer/src/mcp_mr_summarizer/server.py"]
-    }
-  }
-}
-```
-
-**Cursor:**
+**For VSCode/Cursor:**
+1. Open Settings (Ctrl/Cmd + ,)
+2. Search for "mcp"
+3. Click "Edit in settings.json"
+4. Add this configuration:
 ```json
 {
   "mcp.servers": {
     "merge-request-summarizer": {
       "command": "python",
-      "args": ["mcp-mr-summarizer-server"]
+      "args": ["-m", "mcp_mr_summarizer.server"]
     }
   }
 }
 ```
+
+**For Claude Desktop:**
+1. Go to Settings → MCP Servers
+2. Add new server with this configuration:
+```json
+{
+  "mcpServers": {
+    "merge-request-summarizer": {
+      "command": "python",
+      "args": ["-m", "mcp_mr_summarizer.server"]
+    }
+  }
+}
+```
+
+### Ready-to-Use Config Files
+
+Copy the appropriate configuration from the `configs/` folder:
+- `configs/vscode_settings.json` - For VSCode
+- `configs/cursor_settings.json` - For Cursor  
+- `configs/claude_desktop_config.json` - For Claude Desktop
+
+See `configs/README.md` for detailed setup instructions.
 
 ## 🎯 Customization
 

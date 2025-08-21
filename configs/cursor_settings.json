@@ -1,0 +1,11 @@
+{
+    "mcp.servers": {
+        "merge-request-summarizer": {
+            "command": "python",
+            "args": [
+                "-m",
+                "mcp_mr_summarizer.server"
+            ]
+        }
+    }
+}

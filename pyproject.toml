@@ -38,7 +38,11 @@ classifiers = [
     "Topic :: Text Processing :: Markup :: Markdown"
 ]
 requires-python = ">=3.8"
-dependencies = []
+dependencies = [
+    "gitpython>=3.1.0",
+    "click>=8.0.0",
+    "rich>=13.0.0"
+]
 
 [project.optional-dependencies]
 dev = [
@@ -63,6 +67,10 @@ Issues = "https://github.com/yourusername/mcp-merge-request-summarizer/issues"
 Documentation = "https://github.com/yourusername/mcp-merge-request-summarizer/wiki"
 
 [project.scripts]
+mcp-mr-summarizer = "mcp_mr_summarizer.cli:main"
+mcp-mr-summarizer-server = "mcp_mr_summarizer.server:main"
+
+[project.entry-points."console_scripts"]
 mcp-mr-summarizer = "mcp_mr_summarizer.cli:main"
 mcp-mr-summarizer-server = "mcp_mr_summarizer.server:main"
 
