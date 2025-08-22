@@ -3,11 +3,19 @@
 import time
 import sys
 import asyncio
+import logging
 from mcp.server.fastmcp import FastMCP
 
 from .analyzer import GitLogAnalyzer
 from .resources import GitResources
 from .tools import GitTools
+from .config import setup_logging
+
+# Setup logging
+setup_logging()
+
+# Create logger for this module
+logger = logging.getLogger(__name__)
 
 # Create an MCP server
 mcp = FastMCP("merge-request-summarizer")
@@ -32,16 +40,15 @@ def get_analyzer():
 @mcp.resource("git://repo/status")
 async def get_repo_status() -> str:
     """Get current repository status and basic information."""
-    print("[DEBUG] Resource called: get_repo_status", file=sys.stderr)
+    logger.debug("Resource called: get_repo_status")
     return await resources.get_repo_status()
 
 
 @mcp.resource("git://commits/{base_branch}..{current_branch}")
 async def get_commit_history(base_branch: str, current_branch: str) -> str:
     """Get commit history between two branches."""
-    print(
-        f"[DEBUG] Resource called: get_commit_history({base_branch}, {current_branch})",
-        file=sys.stderr,
+    logger.debug(
+        f"Resource called: get_commit_history({base_branch}, {current_branch})"
     )
     return await resources.get_commit_history(base_branch, current_branch)
 
@@ -49,17 +56,14 @@ async def get_commit_history(base_branch: str, current_branch: str) -> str:
 @mcp.resource("git://branches")
 async def get_branches() -> str:
     """Get list of all branches in the repository."""
-    print("[DEBUG] Resource called: get_branches", file=sys.stderr)
+    logger.debug("Resource called: get_branches")
     return await resources.get_branches()
 
 
 @mcp.resource("git://files/changed/{base_branch}..{current_branch}")
 async def get_changed_files(base_branch: str, current_branch: str) -> str:
     """Get list of files changed between two branches."""
-    print(
-        f"[DEBUG] Resource called: get_changed_files({base_branch}, {current_branch})",
-        file=sys.stderr,
-    )
+    logger.debug(f"Resource called: get_changed_files({base_branch}, {current_branch})")
     return await resources.get_changed_files(base_branch, current_branch)
 
 
@@ -73,10 +77,9 @@ async def generate_merge_request_summary(
 ) -> str:
     """Generate a comprehensive merge request summary from git logs"""
     start_time = time.time()
-    print(f"[DEBUG] Async tool called: generate_merge_request_summary", file=sys.stderr)
-    print(
-        f"[DEBUG] Parameters: base_branch={base_branch}, current_branch={current_branch}, repo_path={repo_path}, format={format}",
-        file=sys.stderr,
+    logger.debug("Async tool called: generate_merge_request_summary")
+    logger.debug(
+        f"Parameters: base_branch={base_branch}, current_branch={current_branch}, repo_path={repo_path}, format={format}"
     )
 
     try:
@@ -84,15 +87,13 @@ async def generate_merge_request_summary(
             base_branch, current_branch, repo_path, format
         )
         total_time = time.time() - start_time
-        print(
-            f"[DEBUG] Async tool completed: generate_merge_request_summary in {total_time:.2f}s",
-            file=sys.stderr,
+        logger.info(
+            f"Async tool completed: generate_merge_request_summary in {total_time:.2f}s"
         )
         return result
     except Exception as e:
-        print(
-            f"[ERROR] Async tool failed: generate_merge_request_summary - {e}",
-            file=sys.stderr,
+        logger.error(
+            f"Async tool failed: generate_merge_request_summary - {e}", exc_info=True
         )
         return f"Error: {str(e)}"
 
@@ -103,22 +104,18 @@ async def analyze_git_commits(
 ) -> str:
     """Analyze git commits and categorize them by type"""
     start_time = time.time()
-    print(f"[DEBUG] Async tool called: analyze_git_commits", file=sys.stderr)
-    print(
-        f"[DEBUG] Parameters: base_branch={base_branch}, current_branch={current_branch}, repo_path={repo_path}",
-        file=sys.stderr,
+    logger.debug("Async tool called: analyze_git_commits")
+    logger.debug(
+        f"Parameters: base_branch={base_branch}, current_branch={current_branch}, repo_path={repo_path}"
     )
 
     try:
         result = await tools.analyze_git_commits(base_branch, current_branch, repo_path)
         total_time = time.time() - start_time
-        print(
-            f"[DEBUG] Async tool completed: analyze_git_commits in {total_time:.2f}s",
-            file=sys.stderr,
-        )
+        logger.info(f"Async tool completed: analyze_git_commits in {total_time:.2f}s")
         return result
     except Exception as e:
-        print(f"[ERROR] Async tool failed: analyze_git_commits - {e}", file=sys.stderr)
+        logger.error(f"Async tool failed: analyze_git_commits - {e}", exc_info=True)
         return f"Error: {str(e)}"
 
 

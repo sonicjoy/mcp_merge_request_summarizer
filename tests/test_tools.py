@@ -190,7 +190,7 @@ class TestGitTools:
 
         result = await self.tools.analyze_git_commits("main", "feature")
 
-        # Verify the report structure
+        # todo: Verify the report structure
         assert "# Git Commit Analysis" in result
         assert "## Summary" in result
         assert "Total Commits:** 2" in result

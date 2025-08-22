@@ -4,11 +4,15 @@ import re
 import time
 import sys
 import asyncio
+import logging
 from typing import Dict, List, Optional, Set, Iterator, Tuple
 from dataclasses import dataclass
 from itertools import islice, takewhile, dropwhile
 
 from .models import CommitInfo, MergeRequestSummary
+
+# Create logger for this module
+logger = logging.getLogger(__name__)
 
 
 class TimeoutError(Exception):
@@ -110,9 +114,8 @@ class GitLogAnalyzer:
     ) -> List[CommitInfo]:
         """Retrieve git log between two branches asynchronously."""
         start_time = time.time()
-        print(
-            f"[DEBUG] Starting async git log retrieval: {base_branch}..{current_branch}",
-            file=sys.stderr,
+        logger.debug(
+            f"Starting async git log retrieval: {base_branch}..{current_branch}"
         )
 
         try:
@@ -131,9 +134,7 @@ class GitLogAnalyzer:
                 "--date=short",
             ]
 
-            print(
-                f"[DEBUG] Executing async git command: {' '.join(cmd)}", file=sys.stderr
-            )
+            logger.debug(f"Executing async git command: {' '.join(cmd)}")
 
             # Run git command asynchronously with timeout
             try:
@@ -151,17 +152,15 @@ class GitLogAnalyzer:
 
                 if process.returncode != 0:
                     stderr_text = stderr.decode() if stderr else ""
-                    print(
-                        f"[ERROR] Git command failed with return code {process.returncode}",
-                        file=sys.stderr,
+                    logger.error(
+                        f"Git command failed with return code {process.returncode}"
                     )
                     if stderr_text:
-                        print(f"[ERROR] Git stderr: {stderr_text}", file=sys.stderr)
+                        logger.error(f"Git stderr: {stderr_text}")
                     if process.returncode == 128:
                         # This usually means no commits found between branches
-                        print(
-                            "[DEBUG] No commits found between branches (return code 128)",
-                            file=sys.stderr,
+                        logger.debug(
+                            "No commits found between branches (return code 128)"
                         )
                         return []
                     else:
@@ -170,7 +169,7 @@ class GitLogAnalyzer:
                         )
 
             except asyncio.TimeoutError:
-                print(f"[ERROR] Async git command timed out after 60s", file=sys.stderr)
+                logger.error("Async git command timed out after 60s")
                 # Try to terminate the process if it's still running
                 if process and process.returncode is None:
                     try:
@@ -182,45 +181,32 @@ class GitLogAnalyzer:
                 raise TimeoutError("Git command timed out after 60 seconds")
 
             git_time = time.time() - start_time
-            print(
-                f"[DEBUG] Async git command completed in {git_time:.2f}s",
-                file=sys.stderr,
-            )
+            logger.debug(f"Async git command completed in {git_time:.2f}s")
 
             output = stdout.decode().strip()
-            print(
-                f"[DEBUG] Git output length: {len(output)} characters", file=sys.stderr
-            )
+            logger.debug(f"Git output length: {len(output)} characters")
 
             if not output:
-                print(
-                    "[DEBUG] No git output found, returning empty list", file=sys.stderr
-                )
+                logger.debug("No git output found, returning empty list")
                 return []
 
             # Parse the output using modern Python techniques
             parse_start = time.time()
             commits = await self._parse_git_output_modern(output)
             parse_time = time.time() - parse_start
-            print(
-                f"[DEBUG] Modern async parsing completed in {parse_time:.2f}s, found {len(commits)} commits",
-                file=sys.stderr,
+            logger.debug(
+                f"Modern async parsing completed in {parse_time:.2f}s, found {len(commits)} commits"
             )
 
             total_time = time.time() - start_time
-            print(
-                f"[DEBUG] Total async git log retrieval time: {total_time:.2f}s",
-                file=sys.stderr,
-            )
+            logger.debug(f"Total async git log retrieval time: {total_time:.2f}s")
             return commits
 
         except TimeoutError:
-            print(f"[ERROR] Async operation timed out", file=sys.stderr)
+            logger.error("Async operation timed out")
             raise
         except Exception as e:
-            print(
-                f"[ERROR] Unexpected error in async get_git_log: {e}", file=sys.stderr
-            )
+            logger.error(f"Unexpected error in async get_git_log: {e}")
             raise Exception(f"Unexpected error getting git log: {e}")
 
     async def _parse_git_output_modern(self, output: str) -> List[CommitInfo]:
@@ -234,9 +220,7 @@ class GitLogAnalyzer:
     def _parse_git_output_sync_modern(self, output: str) -> List[CommitInfo]:
         """Modern synchronous parsing of git output using iterators and generators."""
         lines = output.split("\n")
-        print(
-            f"[DEBUG] Modern parsing {len(lines)} lines of git output", file=sys.stderr
-        )
+        logger.debug(f"Modern parsing {len(lines)} lines of git output")
 
         # Use iterator-based parsing for better performance
         commits = []
@@ -253,14 +237,13 @@ class GitLogAnalyzer:
                 commit_info = self._parse_commit_section(section)
                 if commit_info:
                     commits.append(commit_info)
-                    print(
-                        f"[DEBUG] Modern parsed commit {commit_info.hash[:8]}: {len(commit_info.files_changed)} files, {commit_info.insertions}+/{commit_info.deletions}- lines",
-                        file=sys.stderr,
+                    logger.debug(
+                        f"Modern parsed commit {commit_info.hash[:8]}: {len(commit_info.files_changed)} files, {commit_info.insertions}+/{commit_info.deletions}- lines"
                     )
         except StopIteration:
             pass  # End of lines reached
 
-        print(f"[DEBUG] Modern parsing found {len(commits)} commits", file=sys.stderr)
+        logger.debug(f"Modern parsing found {len(commits)} commits")
         return commits
 
     def _extract_commit_section(
@@ -282,17 +265,15 @@ class GitLogAnalyzer:
                 date = next(line_iter).strip()
                 message = next(line_iter).strip()
             except StopIteration:
-                print(
-                    f"[DEBUG] Skipping commit {commit_hash[:8]} - insufficient header lines",
-                    file=sys.stderr,
+                logger.debug(
+                    f"Skipping commit {commit_hash[:8]} - insufficient header lines"
                 )
                 return None
 
             # Validate required fields
             if not all([author, date, message]):
-                print(
-                    f"[DEBUG] Skipping commit {commit_hash[:8]} - missing required fields",
-                    file=sys.stderr,
+                logger.debug(
+                    f"Skipping commit {commit_hash[:8]} - missing required fields"
                 )
                 return None
 
@@ -399,9 +380,7 @@ class GitLogAnalyzer:
         """Legacy synchronous parsing of git output (runs in thread pool)."""
         commits = []
         lines = output.split("\n")
-        print(
-            f"[DEBUG] Legacy parsing {len(lines)} lines of git output", file=sys.stderr
-        )
+        logger.debug(f"Legacy parsing {len(lines)} lines of git output")
 
         i = 0
         max_iterations = len(lines) * 2  # Safety limit
@@ -416,10 +395,7 @@ class GitLogAnalyzer:
                 c in "0123456789abcdef" for c in lines[i].lower()
             ):
                 commit_hash = lines[i]
-                print(
-                    f"[DEBUG] Found commit hash: {commit_hash[:8]}...",
-                    file=sys.stderr,
-                )
+                logger.debug(f"Found commit hash: {commit_hash[:8]}...")
 
                 # Get author, date, and message
                 if i + 3 < len(lines):
@@ -429,9 +405,8 @@ class GitLogAnalyzer:
 
                     # Skip if any required field is empty
                     if not all([author, date, message]):
-                        print(
-                            f"[DEBUG] Skipping commit {commit_hash[:8]} - missing required fields",
-                            file=sys.stderr,
+                        logger.debug(
+                            f"Skipping commit {commit_hash[:8]} - missing required fields"
                         )
                         i += 1
                         continue
@@ -485,26 +460,23 @@ class GitLogAnalyzer:
                     commits.append(commit_info)
                     commits_found += 1
 
-                    print(
-                        f"[DEBUG] Legacy parsed commit {commit_hash[:8]}: {len(files_changed)} files, {insertions}+/{deletions}- lines",
-                        file=sys.stderr,
+                    logger.debug(
+                        f"Legacy parsed commit {commit_hash[:8]}: {len(files_changed)} files, {insertions}+/{deletions}- lines"
                     )
 
                     # Move to next commit - ensure we always advance
                     i = max(j, i + 1)
                 else:
-                    print(
-                        f"[DEBUG] Skipping commit {commit_hash[:8]} - insufficient lines",
-                        file=sys.stderr,
+                    logger.debug(
+                        f"Skipping commit {commit_hash[:8]} - insufficient lines"
                     )
                     i += 1
             else:
                 i += 1
 
         if iteration_count >= max_iterations:
-            print(
-                f"[WARNING] Legacy git log parsing reached maximum iterations ({max_iterations})",
-                file=sys.stderr,
+            logger.warning(
+                f"Legacy git log parsing reached maximum iterations ({max_iterations})"
             )
 
         return commits

@@ -4,11 +4,15 @@ import json
 import time
 import sys
 import asyncio
+import logging
 from dataclasses import asdict
 from typing import Dict, Any
 import subprocess
 
 from .analyzer import GitLogAnalyzer
+
+# Create logger for this module
+logger = logging.getLogger(__name__)
 
 
 class GitTools:
@@ -18,15 +22,13 @@ class GitTools:
         """Initialize GitTools with repository path."""
         self.repo_path = repo_path
         self._analyzer = None
-        print(
-            f"[DEBUG] GitTools initialized with repo_path: {repo_path}", file=sys.stderr
-        )
+        logger.debug(f"GitTools initialized with repo_path: {repo_path}")
 
     @property
     def analyzer(self):
         """Get or create the analyzer instance."""
         if self._analyzer is None:
-            print(f"[DEBUG] Creating new GitLogAnalyzer instance", file=sys.stderr)
+            logger.debug("Creating new GitLogAnalyzer instance")
             self._analyzer = GitLogAnalyzer(self.repo_path)
         return self._analyzer
 
@@ -39,77 +41,65 @@ class GitTools:
     ) -> str:
         """Generate a comprehensive merge request summary from git logs asynchronously."""
         start_time = time.time()
-        print(f"[DEBUG] Starting async generate_merge_request_summary", file=sys.stderr)
-        print(
-            f"[DEBUG] Parameters: base_branch={base_branch}, current_branch={current_branch}, repo_path={repo_path}, format={format}",
-            file=sys.stderr,
+        logger.debug("Starting async generate_merge_request_summary")
+        logger.debug(
+            f"Parameters: base_branch={base_branch}, current_branch={current_branch}, repo_path={repo_path}, format={format}"
         )
 
         try:
             # Update analyzer repo path if specified
             if repo_path != "." and repo_path != self.repo_path:
-                print(
-                    f"[DEBUG] Updating analyzer repo_path from {self.repo_path} to {repo_path}",
-                    file=sys.stderr,
+                logger.debug(
+                    f"Updating analyzer repo_path from {self.repo_path} to {repo_path}"
                 )
                 self._analyzer = GitLogAnalyzer(repo_path)
                 self.repo_path = repo_path
 
             # Get commits and generate summary with timeout protection
             try:
-                print(f"[DEBUG] Calling async analyzer.get_git_log...", file=sys.stderr)
+                logger.debug("Calling async analyzer.get_git_log...")
                 commits = await self.analyzer.get_git_log(base_branch, current_branch)
                 git_time = time.time() - start_time
-                print(
-                    f"[DEBUG] async get_git_log completed in {git_time:.2f}s, found {len(commits)} commits",
-                    file=sys.stderr,
+                logger.debug(
+                    f"async get_git_log completed in {git_time:.2f}s, found {len(commits)} commits"
                 )
 
                 if not commits:
-                    print("[DEBUG] No commits found, returning early", file=sys.stderr)
+                    logger.debug("No commits found, returning early")
                     return (
                         f"No commits found between {base_branch} and {current_branch}."
                     )
 
-                print(
-                    f"[DEBUG] Calling async analyzer.generate_summary...",
-                    file=sys.stderr,
-                )
+                logger.debug("Calling async analyzer.generate_summary...")
                 summary_start = time.time()
                 summary = await self.analyzer.generate_summary(commits)
                 summary_time = time.time() - summary_start
-                print(
-                    f"[DEBUG] async generate_summary completed in {summary_time:.2f}s",
-                    file=sys.stderr,
-                )
+                logger.debug(f"async generate_summary completed in {summary_time:.2f}s")
 
                 if format == "json":
-                    print("[DEBUG] Returning JSON format", file=sys.stderr)
+                    logger.debug("Returning JSON format")
                     return json.dumps(asdict(summary), indent=2)
                 else:
-                    print("[DEBUG] Returning markdown format", file=sys.stderr)
+                    logger.debug("Returning markdown format")
                     return f"# {summary.title}\n\n{summary.description}"
 
             except asyncio.TimeoutError:
-                print("[ERROR] Async git operation timed out", file=sys.stderr)
+                logger.error("Async git operation timed out")
                 return f"Error: Git operation timed out. Please check if the repository is accessible and the branches exist."
             except subprocess.CalledProcessError as e:
-                print(f"[ERROR] Git command failed: {e}", file=sys.stderr)
+                logger.error(f"Git command failed: {e}")
                 return f"Error: Git command failed: {e.stderr.decode() if e.stderr else str(e)}"
             except Exception as e:
-                print(f"[ERROR] Error processing git data: {e}", file=sys.stderr)
+                logger.error(f"Error processing git data: {e}")
                 return f"Error processing git data: {str(e)}"
 
         except Exception as e:
-            print(
-                f"[ERROR] Error generating merge request summary: {e}", file=sys.stderr
-            )
+            logger.error(f"Error generating merge request summary: {e}")
             return f"Error generating merge request summary: {str(e)}"
         finally:
             total_time = time.time() - start_time
-            print(
-                f"[DEBUG] async generate_merge_request_summary completed in {total_time:.2f}s",
-                file=sys.stderr,
+            logger.debug(
+                f"async generate_merge_request_summary completed in {total_time:.2f}s"
             )
 
     async def analyze_git_commits(
@@ -120,76 +110,64 @@ class GitTools:
     ) -> str:
         """Analyze git commits and categorize them by type asynchronously."""
         start_time = time.time()
-        print(f"[DEBUG] Starting async analyze_git_commits", file=sys.stderr)
-        print(
-            f"[DEBUG] Parameters: base_branch={base_branch}, current_branch={current_branch}, repo_path={repo_path}",
-            file=sys.stderr,
+        logger.debug("Starting async analyze_git_commits")
+        logger.debug(
+            f"Parameters: base_branch={base_branch}, current_branch={current_branch}, repo_path={repo_path}"
         )
 
         try:
             # Update analyzer repo path if specified
             if repo_path != "." and repo_path != self.repo_path:
-                print(
-                    f"[DEBUG] Updating analyzer repo_path from {self.repo_path} to {repo_path}",
-                    file=sys.stderr,
+                logger.debug(
+                    f"Updating analyzer repo_path from {self.repo_path} to {repo_path}"
                 )
                 self._analyzer = GitLogAnalyzer(repo_path)
                 self.repo_path = repo_path
 
             # Get commits with timeout protection
             try:
-                print(f"[DEBUG] Calling async analyzer.get_git_log...", file=sys.stderr)
+                logger.debug("Calling async analyzer.get_git_log...")
                 commits = await self.analyzer.get_git_log(base_branch, current_branch)
                 git_time = time.time() - start_time
-                print(
-                    f"[DEBUG] async get_git_log completed in {git_time:.2f}s, found {len(commits)} commits",
-                    file=sys.stderr,
+                logger.debug(
+                    f"async get_git_log completed in {git_time:.2f}s, found {len(commits)} commits"
                 )
 
                 if not commits:
-                    print("[DEBUG] No commits found, returning early", file=sys.stderr)
+                    logger.debug("No commits found, returning early")
                     return "No commits found between the specified branches."
 
                 # Analyze commits asynchronously
-                print(f"[DEBUG] Starting async commit analysis...", file=sys.stderr)
+                logger.debug("Starting async commit analysis...")
                 analysis_start = time.time()
                 analysis = await self._analyze_commits_async(commits)
                 analysis_time = time.time() - analysis_start
-                print(
-                    f"[DEBUG] Async commit analysis completed in {analysis_time:.2f}s",
-                    file=sys.stderr,
-                )
+                logger.debug(f"Async commit analysis completed in {analysis_time:.2f}s")
 
-                print(f"[DEBUG] Generating async analysis report...", file=sys.stderr)
+                logger.debug("Generating async analysis report...")
                 report_start = time.time()
                 report = await self._generate_analysis_report_async(analysis)
                 report_time = time.time() - report_start
-                print(
-                    f"[DEBUG] Async report generation completed in {report_time:.2f}s",
-                    file=sys.stderr,
-                )
+                logger.debug(f"Async report generation completed in {report_time:.2f}s")
 
                 return report
 
             except asyncio.TimeoutError:
-                print("[ERROR] Async git operation timed out", file=sys.stderr)
+                logger.error("Async git operation timed out")
                 return f"Error: Git operation timed out. Please check if the repository is accessible and the branches exist."
             except subprocess.CalledProcessError as e:
-                print(f"[ERROR] Git command failed: {e}", file=sys.stderr)
+                logger.error(f"Git command failed: {e}")
                 return f"Error: Git command failed: {e.stderr.decode() if e.stderr else str(e)}"
             except Exception as e:
-                print(f"[ERROR] Error processing git data: {e}", file=sys.stderr)
+                logger.error(f"Error processing git data: {e}")
                 return f"Error processing git data: {str(e)}"
 
         except Exception as e:
-            print(f"[ERROR] Error analyzing git commits: {e}", file=sys.stderr)
+            logger.error(f"Error analyzing git commits: {e}")
             return f"Error analyzing git commits: {str(e)}"
         finally:
             total_time = time.time() - start_time
-            print(
-                f"[DEBUG] async analyze_git_commits completed in {total_time:.2f}s",
-                file=sys.stderr,
-            )
+            logger.debug(f"async analyze_git_commits completed in {total_time:.2f}s")
 
     async def _analyze_commits_async(self, commits) -> Dict[str, Any]:
         """Analyze commits asynchronously."""
@@ -210,9 +188,8 @@ class GitTools:
 
         for i, commit in enumerate(commits):
             try:
-                print(
-                    f"[DEBUG] Analyzing commit {i+1}/{len(commits)}: {commit.hash[:8]}",
-                    file=sys.stderr,
+                logger.debug(
+                    f"Analyzing commit {i+1}/{len(commits)}: {commit.hash[:8]}"
                 )
                 categories = self.analyzer.categorize_commit(commit)
                 for category in categories:
@@ -239,10 +216,7 @@ class GitTools:
                         }
                     )
             except Exception as e:
-                print(
-                    f"[WARNING] Error analyzing commit {commit.hash[:8]}: {e}",
-                    file=sys.stderr,
-                )
+                logger.warning(f"Error analyzing commit {commit.hash[:8]}: {e}")
                 # Continue processing other commits even if one fails
                 continue
 
@@ -296,6 +270,7 @@ class GitTools:
                             report += f"- ... and {len(files) - 10} more\n"
                         report += "\n"
             except Exception as e:
+                logger.error(f"Error categorizing files: {e}")
                 report += f"Error categorizing files: {str(e)}\n\n"
                 # Fallback: just list all files
                 report += "### All Files\n"
