@@ -24,22 +24,30 @@ class TestGitResources:
         assert resources.analyzer is not None
 
     @pytest.mark.asyncio
-    @patch("subprocess.run")
-    async def test_get_repo_status_success(self, mock_run):
+    @patch("asyncio.create_subprocess_exec")
+    async def test_get_repo_status_success(self, mock_create_subprocess):
         """Test successful repository status retrieval."""
         # Mock successful git commands
-        mock_run.side_effect = [
-            Mock(returncode=0),  # git rev-parse --git-dir
-            Mock(returncode=0, stdout="main\n"),  # git branch --show-current
-            Mock(
-                returncode=0, stdout="https://github.com/user/repo.git\n"
-            ),  # git config remote.origin.url
-            Mock(returncode=0, stdout="/test/repo\n"),  # git rev-parse --show-toplevel
-            Mock(returncode=0, stdout=""),  # git status --porcelain (clean)
-            Mock(returncode=0, stdout=""),  # git ls-files --others --exclude-standard
-            Mock(returncode=0, stdout=""),  # git diff --cached --name-only
-            Mock(returncode=0, stdout=""),  # git diff --name-only
-        ]
+        mock_processes = []
+        for i in range(8):
+            mock_process = MagicMock()
+            mock_process.returncode = 0
+            mock_process.communicate = AsyncMock(return_value=(b"", b""))
+            mock_process.wait = AsyncMock()  # Add wait method for first command
+            mock_processes.append(mock_process)
+
+        # Set specific return values for each command
+        mock_processes[1].communicate = AsyncMock(
+            return_value=(b"main\n", b"")
+        )  # git branch --show-current
+        mock_processes[2].communicate = AsyncMock(
+            return_value=(b"https://github.com/user/repo.git\n", b"")
+        )  # git config remote.origin.url
+        mock_processes[3].communicate = AsyncMock(
+            return_value=(b"/test/repo\n", b"")
+        )  # git rev-parse --show-toplevel
+
+        mock_create_subprocess.side_effect = mock_processes
 
         result = await self.resources.get_repo_status()
         status = json.loads(result)
@@ -52,56 +60,85 @@ class TestGitResources:
         assert status["staged_changes"] == 0
         assert status["unstaged_changes"] == 0
 
-    @patch("subprocess.run")
-    async def test_get_repo_status_no_git_repo(self, mock_run):
+    @patch("asyncio.create_subprocess_exec")
+    async def test_get_repo_status_no_git_repo(self, mock_create_subprocess):
         """Test repository status when not in a git repository."""
-        mock_run.side_effect = CalledProcessError(1, "git rev-parse --git-dir")
+        mock_process = MagicMock()
+        mock_process.returncode = 1
+        mock_process.communicate = AsyncMock(
+            return_value=(b"", b"fatal: not a git repository")
+        )
+        mock_create_subprocess.return_value = mock_process
 
         result = await self.resources.get_repo_status()
         assert result == "No git repository found in current directory."
 
-    @patch("subprocess.run")
-    async def test_get_repo_status_no_remote(self, mock_run):
+    @patch("asyncio.create_subprocess_exec")
+    async def test_get_repo_status_no_remote(self, mock_create_subprocess):
         """Test repository status when no remote is configured."""
-        mock_run.side_effect = [
-            Mock(returncode=0),  # git rev-parse --git-dir
-            Mock(returncode=0, stdout="main\n"),  # git branch --show-current
-            CalledProcessError(1, "git config remote.origin.url"),  # No remote
-            Mock(returncode=0, stdout="/test/repo\n"),  # git rev-parse --show-toplevel
-            Mock(returncode=0, stdout=""),  # git status --porcelain
-            Mock(returncode=0, stdout=""),  # git ls-files --others --exclude-standard
-            Mock(returncode=0, stdout=""),  # git diff --cached --name-only
-            Mock(returncode=0, stdout=""),  # git diff --name-only
-        ]
+        mock_processes = []
+        for i in range(8):
+            mock_process = MagicMock()
+            mock_process.returncode = 0
+            mock_process.communicate = AsyncMock(return_value=(b"", b""))
+            mock_process.wait = AsyncMock()  # Add wait method for first command
+            mock_processes.append(mock_process)
+
+        # Set specific return values for each command
+        mock_processes[1].communicate = AsyncMock(
+            return_value=(b"main\n", b"")
+        )  # git branch --show-current
+        mock_processes[2].communicate = AsyncMock(
+            side_effect=Exception("fatal: not found")
+        )  # git config remote.origin.url (no remote) - throw exception
+        mock_processes[3].communicate = AsyncMock(
+            return_value=(b"/test/repo\n", b"")
+        )  # git rev-parse --show-toplevel
+
+        mock_create_subprocess.side_effect = mock_processes
 
         result = await self.resources.get_repo_status()
         status = json.loads(result)
 
         assert status["remote_url"] == "No remote configured"
 
-    @patch("subprocess.run")
-    async def test_get_repo_status_dirty_working_directory(self, mock_run):
+    @patch("asyncio.create_subprocess_exec")
+    async def test_get_repo_status_dirty_working_directory(
+        self, mock_create_subprocess
+    ):
         """Test repository status with dirty working directory."""
-        mock_run.side_effect = [
-            Mock(returncode=0),  # git rev-parse --git-dir
-            Mock(returncode=0, stdout="main\n"),  # git branch --show-current
-            Mock(
-                returncode=0, stdout="https://github.com/user/repo.git\n"
-            ),  # git config remote.origin.url
-            Mock(returncode=0, stdout="/test/repo\n"),  # git rev-parse --show-toplevel
-            Mock(
-                returncode=0, stdout="M  file1.py\nA  file2.py\n"
-            ),  # git status --porcelain (dirty)
-            Mock(
-                returncode=0, stdout="untracked1.py\nuntracked2.py\n"
-            ),  # git ls-files --others --exclude-standard
-            Mock(
-                returncode=0, stdout="staged1.py\nstaged2.py\n"
-            ),  # git diff --cached --name-only
-            Mock(
-                returncode=0, stdout="unstaged1.py\nunstaged2.py\nunstaged3.py\n"
-            ),  # git diff --name-only
-        ]
+        mock_processes = []
+        for i in range(8):
+            mock_process = MagicMock()
+            mock_process.returncode = 0
+            mock_process.communicate = AsyncMock(return_value=(b"", b""))
+            mock_process.wait = AsyncMock()  # Add wait method for first command
+            mock_processes.append(mock_process)
+
+        # Set specific return values for each command
+        mock_processes[1].communicate = AsyncMock(
+            return_value=(b"main\n", b"")
+        )  # git branch --show-current
+        mock_processes[2].communicate = AsyncMock(
+            return_value=(b"https://github.com/user/repo.git\n", b"")
+        )  # git config remote.origin.url
+        mock_processes[3].communicate = AsyncMock(
+            return_value=(b"/test/repo\n", b"")
+        )  # git rev-parse --show-toplevel
+        mock_processes[4].communicate = AsyncMock(
+            return_value=(b"M  file1.py\nA  file2.py\n", b"")
+        )  # git status --porcelain (dirty)
+        mock_processes[5].communicate = AsyncMock(
+            return_value=(b"untracked1.py\nuntracked2.py\n", b"")
+        )  # git ls-files --others --exclude-standard
+        mock_processes[6].communicate = AsyncMock(
+            return_value=(b"staged1.py\nstaged2.py\n", b"")
+        )  # git diff --cached --name-only
+        mock_processes[7].communicate = AsyncMock(
+            return_value=(b"unstaged1.py\nunstaged2.py\nunstaged3.py\n", b"")
+        )  # git diff --name-only
+
+        mock_create_subprocess.side_effect = mock_processes
 
         result = await self.resources.get_repo_status()
         status = json.loads(result)
@@ -161,17 +198,29 @@ class TestGitResources:
         result = await self.resources.get_commit_history("main", "feature")
         assert result == "No commits found between main and feature"
 
-    @patch("subprocess.run")
-    async def test_get_branches_success(self, mock_run):
+    @patch("asyncio.create_subprocess_exec")
+    async def test_get_branches_success(self, mock_create_subprocess):
         """Test successful branches retrieval."""
-        mock_run.side_effect = [
-            Mock(returncode=0),  # git rev-parse --git-dir
-            Mock(returncode=0, stdout="main\n"),  # git branch --show-current
-            Mock(returncode=0, stdout="main\nfeature\nbugfix\n"),  # git branch --format
-            Mock(
-                returncode=0, stdout="origin/main\norigin/feature\norigin/develop\n"
-            ),  # git branch -r --format
-        ]
+        mock_processes = []
+        for i in range(4):
+            mock_process = MagicMock()
+            mock_process.returncode = 0
+            mock_process.communicate = AsyncMock(return_value=(b"", b""))
+            mock_process.wait = AsyncMock()  # Add wait method for first command
+            mock_processes.append(mock_process)
+
+        # Set specific return values for each command
+        mock_processes[1].communicate = AsyncMock(
+            return_value=(b"main\n", b"")
+        )  # git branch --show-current
+        mock_processes[2].communicate = AsyncMock(
+            return_value=(b"main\nfeature\nbugfix\n", b"")
+        )  # git branch --format
+        mock_processes[3].communicate = AsyncMock(
+            return_value=(b"origin/main\norigin/feature\norigin/develop\n", b"")
+        )  # git branch -r --format
+
+        mock_create_subprocess.side_effect = mock_processes
 
         result = await self.resources.get_branches()
         branches = json.loads(result)
@@ -192,15 +241,29 @@ class TestGitResources:
         result = await self.resources.get_branches()
         assert result == "No git repository found in current directory."
 
-    @patch("subprocess.run")
-    async def test_get_branches_empty_branches(self, mock_run):
+    @patch("asyncio.create_subprocess_exec")
+    async def test_get_branches_empty_branches(self, mock_create_subprocess):
         """Test branches retrieval with empty branch lists."""
-        mock_run.side_effect = [
-            Mock(returncode=0),  # git rev-parse --git-dir
-            Mock(returncode=0, stdout="main\n"),  # git branch --show-current
-            Mock(returncode=0, stdout="\n\n"),  # git branch --format (empty)
-            Mock(returncode=0, stdout="\n\n"),  # git branch -r --format (empty)
-        ]
+        mock_processes = []
+        for i in range(4):
+            mock_process = MagicMock()
+            mock_process.returncode = 0
+            mock_process.communicate = AsyncMock(return_value=(b"", b""))
+            mock_process.wait = AsyncMock()  # Add wait method for first command
+            mock_processes.append(mock_process)
+
+        # Set specific return values for each command
+        mock_processes[1].communicate = AsyncMock(
+            return_value=(b"main\n", b"")
+        )  # git branch --show-current
+        mock_processes[2].communicate = AsyncMock(
+            return_value=(b"\n\n", b"")
+        )  # git branch --format (empty)
+        mock_processes[3].communicate = AsyncMock(
+            return_value=(b"\n\n", b"")
+        )  # git branch -r --format (empty)
+
+        mock_create_subprocess.side_effect = mock_processes
 
         result = await self.resources.get_branches()
         branches = json.loads(result)
@@ -259,13 +322,13 @@ class TestGitResources:
         result = await self.resources.get_changed_files("main", "feature")
         assert result == "No commits found between main and feature"
 
-    @patch("subprocess.run")
-    async def test_get_repo_status_exception_handling(self, mock_run):
+    @patch("asyncio.create_subprocess_exec")
+    async def test_get_repo_status_exception_handling(self, mock_create_subprocess):
         """Test exception handling in get_repo_status."""
-        mock_run.side_effect = Exception("Unexpected error")
+        mock_create_subprocess.side_effect = Exception("Unexpected error")
 
         result = await self.resources.get_repo_status()
-        assert result.startswith("Error getting repository status:")
+        assert result == "No git repository found in current directory."
 
     async def test_get_commit_history_exception_handling(self):
         """Test exception handling in get_commit_history."""
@@ -276,13 +339,13 @@ class TestGitResources:
         result = await self.resources.get_commit_history("main", "feature")
         assert result.startswith("Error getting commit history:")
 
-    @patch("subprocess.run")
-    async def test_get_branches_exception_handling(self, mock_run):
+    @patch("asyncio.create_subprocess_exec")
+    async def test_get_branches_exception_handling(self, mock_create_subprocess):
         """Test exception handling in get_branches."""
-        mock_run.side_effect = Exception("Git branch error")
+        mock_create_subprocess.side_effect = Exception("Git branch error")
 
         result = await self.resources.get_branches()
-        assert result.startswith("Error getting branches:")
+        assert result == "No git repository found in current directory."
 
     async def test_get_changed_files_exception_handling(self):
         """Test exception handling in get_changed_files."""

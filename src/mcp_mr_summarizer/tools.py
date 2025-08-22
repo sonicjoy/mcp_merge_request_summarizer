@@ -2,12 +2,10 @@
 
 import json
 import time
-import sys
 import asyncio
 import logging
 from dataclasses import asdict
 from typing import Dict, Any
-import subprocess
 
 from .analyzer import GitLogAnalyzer
 
@@ -86,9 +84,6 @@ class GitTools:
             except asyncio.TimeoutError:
                 logger.error("Async git operation timed out")
                 return f"Error: Git operation timed out. Please check if the repository is accessible and the branches exist."
-            except subprocess.CalledProcessError as e:
-                logger.error(f"Git command failed: {e}")
-                return f"Error: Git command failed: {e.stderr.decode() if e.stderr else str(e)}"
             except Exception as e:
                 logger.error(f"Error processing git data: {e}")
                 return f"Error processing git data: {str(e)}"
@@ -155,9 +150,6 @@ class GitTools:
             except asyncio.TimeoutError:
                 logger.error("Async git operation timed out")
                 return f"Error: Git operation timed out. Please check if the repository is accessible and the branches exist."
-            except subprocess.CalledProcessError as e:
-                logger.error(f"Git command failed: {e}")
-                return f"Error: Git command failed: {e.stderr.decode() if e.stderr else str(e)}"
             except Exception as e:
                 logger.error(f"Error processing git data: {e}")
                 return f"Error processing git data: {str(e)}"
@@ -281,31 +273,3 @@ class GitTools:
                 report += "\n"
 
         return report
-
-    # Keep the old synchronous methods for backward compatibility
-    def generate_merge_request_summary_sync(
-        self,
-        base_branch: str = "develop",
-        current_branch: str = "HEAD",
-        repo_path: str = ".",
-        format: str = "markdown",
-    ) -> str:
-        """Synchronous version for backward compatibility."""
-        # Run the async version in a new event loop
-        return asyncio.run(
-            self.generate_merge_request_summary(
-                base_branch, current_branch, repo_path, format
-            )
-        )
-
-    def analyze_git_commits_sync(
-        self,
-        base_branch: str = "develop",
-        current_branch: str = "HEAD",
-        repo_path: str = ".",
-    ) -> str:
-        """Synchronous version for backward compatibility."""
-        # Run the async version in a new event loop
-        return asyncio.run(
-            self.analyze_git_commits(base_branch, current_branch, repo_path)
-        )

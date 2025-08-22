@@ -120,4 +120,4 @@ async def analyze_git_commits(
 
 
 if __name__ == "__main__":
-    mcp.run()
+    asyncio.run(mcp.run_stdio_async())

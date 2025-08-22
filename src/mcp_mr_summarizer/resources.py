@@ -2,7 +2,7 @@
 
 import json
 import os
-import subprocess
+import asyncio
 from typing import Dict, Any
 
 from .analyzer import GitLogAnalyzer
@@ -28,92 +28,120 @@ class GitResources:
         try:
             # Check if we're in a git repository
             try:
-                subprocess.run(
-                    ["git", "rev-parse", "--git-dir"],
-                    capture_output=True,
-                    check=True,
+                result = await asyncio.create_subprocess_exec(
+                    "git",
+                    "rev-parse",
+                    "--git-dir",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
                     cwd=self.repo_path,
                 )
-            except subprocess.CalledProcessError:
+                await result.wait()
+                if result.returncode != 0:
+                    return "No git repository found in current directory."
+            except Exception:
                 return "No git repository found in current directory."
 
             # Get current branch
-            result = subprocess.run(
-                ["git", "branch", "--show-current"],
-                capture_output=True,
-                text=True,
-                check=True,
+            result = await asyncio.create_subprocess_exec(
+                "git",
+                "branch",
+                "--show-current",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
                 cwd=self.repo_path,
             )
-            current_branch = result.stdout.strip()
+            stdout, stderr = await result.communicate()
+            current_branch = stdout.decode().strip()
 
             # Get remote URL
             try:
-                result = subprocess.run(
-                    ["git", "config", "--get", "remote.origin.url"],
-                    capture_output=True,
-                    text=True,
-                    check=True,
+                result = await asyncio.create_subprocess_exec(
+                    "git",
+                    "config",
+                    "--get",
+                    "remote.origin.url",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
                     cwd=self.repo_path,
                 )
-                remote_url = result.stdout.strip()
-            except subprocess.CalledProcessError:
+                stdout, stderr = await result.communicate()
+                remote_url = stdout.decode().strip()
+            except Exception:
                 remote_url = "No remote configured"
 
             # Get repository name
-            result = subprocess.run(
-                ["git", "rev-parse", "--show-toplevel"],
-                capture_output=True,
-                text=True,
-                check=True,
+            result = await asyncio.create_subprocess_exec(
+                "git",
+                "rev-parse",
+                "--show-toplevel",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
                 cwd=self.repo_path,
             )
-            repo_name = os.path.basename(result.stdout.strip())
+            stdout, stderr = await result.communicate()
+            repo_name = os.path.basename(stdout.decode().strip())
 
             # Check if working directory is dirty
-            result = subprocess.run(
-                ["git", "status", "--porcelain"],
-                capture_output=True,
-                text=True,
-                check=True,
+            result = await asyncio.create_subprocess_exec(
+                "git",
+                "status",
+                "--porcelain",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
                 cwd=self.repo_path,
             )
-            is_dirty = bool(result.stdout.strip())
+            stdout, stderr = await result.communicate()
+            is_dirty = bool(stdout.decode().strip())
 
             # Count untracked files
-            result = subprocess.run(
-                ["git", "ls-files", "--others", "--exclude-standard"],
-                capture_output=True,
-                text=True,
-                check=True,
+            result = await asyncio.create_subprocess_exec(
+                "git",
+                "ls-files",
+                "--others",
+                "--exclude-standard",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
                 cwd=self.repo_path,
             )
+            stdout, stderr = await result.communicate()
             untracked_files = (
-                len(result.stdout.strip().split("\n")) if result.stdout.strip() else 0
+                len(stdout.decode().strip().split("\n"))
+                if stdout.decode().strip()
+                else 0
             )
 
             # Count staged changes
-            result = subprocess.run(
-                ["git", "diff", "--cached", "--name-only"],
-                capture_output=True,
-                text=True,
-                check=True,
+            result = await asyncio.create_subprocess_exec(
+                "git",
+                "diff",
+                "--cached",
+                "--name-only",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
                 cwd=self.repo_path,
             )
+            stdout, stderr = await result.communicate()
             staged_changes = (
-                len(result.stdout.strip().split("\n")) if result.stdout.strip() else 0
+                len(stdout.decode().strip().split("\n"))
+                if stdout.decode().strip()
+                else 0
             )
 
             # Count unstaged changes
-            result = subprocess.run(
-                ["git", "diff", "--name-only"],
-                capture_output=True,
-                text=True,
-                check=True,
+            result = await asyncio.create_subprocess_exec(
+                "git",
+                "diff",
+                "--name-only",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
                 cwd=self.repo_path,
             )
+            stdout, stderr = await result.communicate()
             unstaged_changes = (
-                len(result.stdout.strip().split("\n")) if result.stdout.strip() else 0
+                len(stdout.decode().strip().split("\n"))
+                if stdout.decode().strip()
+                else 0
             )
 
             status = {
@@ -161,50 +189,62 @@ class GitResources:
         try:
             # Check if we're in a git repository
             try:
-                subprocess.run(
-                    ["git", "rev-parse", "--git-dir"],
-                    capture_output=True,
-                    check=True,
+                result = await asyncio.create_subprocess_exec(
+                    "git",
+                    "rev-parse",
+                    "--git-dir",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
                     cwd=self.repo_path,
                 )
-            except subprocess.CalledProcessError:
+                await result.wait()
+                if result.returncode != 0:
+                    return "No git repository found in current directory."
+            except Exception:
                 return "No git repository found in current directory."
 
             # Get current branch
-            result = subprocess.run(
-                ["git", "branch", "--show-current"],
-                capture_output=True,
-                text=True,
-                check=True,
+            result = await asyncio.create_subprocess_exec(
+                "git",
+                "branch",
+                "--show-current",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
                 cwd=self.repo_path,
             )
-            current_branch = result.stdout.strip()
+            stdout, stderr = await result.communicate()
+            current_branch = stdout.decode().strip()
 
             # Get local branches
-            result = subprocess.run(
-                ["git", "branch", "--format=%(refname:short)"],
-                capture_output=True,
-                text=True,
-                check=True,
+            result = await asyncio.create_subprocess_exec(
+                "git",
+                "branch",
+                "--format=%(refname:short)",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
                 cwd=self.repo_path,
             )
+            stdout, stderr = await result.communicate()
             local_branches = [
                 branch.strip()
-                for branch in result.stdout.strip().split("\n")
+                for branch in stdout.decode().strip().split("\n")
                 if branch.strip()
             ]
 
             # Get remote branches
-            result = subprocess.run(
-                ["git", "branch", "-r", "--format=%(refname:short)"],
-                capture_output=True,
-                text=True,
-                check=True,
+            result = await asyncio.create_subprocess_exec(
+                "git",
+                "branch",
+                "-r",
+                "--format=%(refname:short)",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
                 cwd=self.repo_path,
             )
+            stdout, stderr = await result.communicate()
             remote_branches = [
                 branch.strip()
-                for branch in result.stdout.strip().split("\n")
+                for branch in stdout.decode().strip().split("\n")
                 if branch.strip()
             ]
 

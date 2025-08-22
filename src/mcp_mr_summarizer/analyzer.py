@@ -45,7 +45,9 @@ class GitLogAnalyzer:
         self.repo_path = repo_path
         # Only validate in production, not during testing
         if not self._is_testing():
-            self._validate_repo_path()
+            # Note: _validate_repo_path is now async but we can't await in __init__
+            # Validation will be done when needed in async methods
+            pass
 
     def _is_testing(self) -> bool:
         """Check if we're running in a test environment."""
@@ -57,36 +59,67 @@ class GitLogAnalyzer:
             or "PYTEST_CURRENT_TEST" in os.environ
         )
 
-    def _validate_repo_path(self) -> None:
-        """Validate that the repository path exists and is a git repository."""
+    async def _validate_repo_path(self) -> None:
+        """Validate that the repository path exists and is a valid git repository."""
         import os
 
         if not os.path.exists(self.repo_path):
             raise ValueError(f"Repository path does not exist: {self.repo_path}")
 
-        git_dir = os.path.join(self.repo_path, ".git")
-        if not os.path.exists(git_dir):
-            raise ValueError(f"Not a git repository: {self.repo_path}")
+        # Check if it's actually a git repository by running git command
+        try:
+            result = await asyncio.create_subprocess_exec(
+                "git",
+                "-C",
+                self.repo_path,
+                "rev-parse",
+                "--git-dir",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(result.communicate(), timeout=10.0)
+
+            if result.returncode != 0:
+                raise ValueError(f"Not a valid git repository: {self.repo_path}")
+
+            # Additional validation: check if we can get the repository root
+            result = await asyncio.create_subprocess_exec(
+                "git",
+                "-C",
+                self.repo_path,
+                "rev-parse",
+                "--show-toplevel",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(result.communicate(), timeout=10.0)
+
+            if result.returncode != 0:
+                raise ValueError(f"Invalid git repository state: {self.repo_path}")
+
+        except asyncio.TimeoutError:
+            raise ValueError(f"Git repository validation timed out: {self.repo_path}")
+        except FileNotFoundError:
+            raise ValueError(
+                "Git command not found. Please ensure git is installed and in your PATH."
+            )
+        except Exception as e:
+            raise ValueError(f"Error validating git repository: {e}")
 
     async def _validate_branches(self, base_branch: str, current_branch: str) -> None:
         """Validate that the specified branches exist in the repository."""
-        import asyncio
-
-        # Get all available branches
         cmd = ["git", "-C", self.repo_path, "branch", "-a", "--format=%(refname:short)"]
 
         try:
-            process = await asyncio.create_subprocess_exec(
+            result = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
+            stdout, stderr = await asyncio.wait_for(result.communicate(), timeout=30.0)
 
-            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=30.0)
-
-            if process.returncode != 0:
-                stderr_text = stderr.decode() if stderr else ""
-                raise Exception(f"Failed to get branches: {stderr_text}")
+            if result.returncode != 0:
+                raise Exception(f"Failed to get branches: {stderr.decode()}")
 
             available_branches = set(stdout.decode().strip().split("\n"))
 
@@ -101,11 +134,17 @@ class GitLogAnalyzer:
                 raise ValueError(
                     f"Branch(es) not found: {', '.join(missing_branches)}. Available branches: {', '.join(sorted(available_branches))}"
                 )
-
         except asyncio.TimeoutError:
             raise TimeoutError("Branch validation timed out")
+        except FileNotFoundError:
+            raise Exception(
+                "Git command not found. Please ensure git is installed and in your PATH."
+            )
         except Exception as e:
             if "Branch(es) not found" in str(e):
+                raise
+            # Re-raise TimeoutError directly
+            if isinstance(e, TimeoutError):
                 raise
             raise Exception(f"Error validating branches: {e}")
 
@@ -114,15 +153,15 @@ class GitLogAnalyzer:
     ) -> List[CommitInfo]:
         """Retrieve git log between two branches asynchronously."""
         start_time = time.time()
-        logger.debug(
-            f"Starting async git log retrieval: {base_branch}..{current_branch}"
-        )
+        logger.debug(f"Starting git log retrieval: {base_branch}..{current_branch}")
 
         try:
-            # Validate branches exist before proceeding
+            # Validate repository path if not in testing
+            if not self._is_testing():
+                await self._validate_repo_path()
+
             await self._validate_branches(base_branch, current_branch)
 
-            # Get all commit information in one command
             cmd = [
                 "git",
                 "-C",
@@ -134,63 +173,31 @@ class GitLogAnalyzer:
                 "--date=short",
             ]
 
-            logger.debug(f"Executing async git command: {' '.join(cmd)}")
+            logger.debug(f"Executing git command: {' '.join(cmd)}")
+            result = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(result.communicate(), timeout=60.0)
 
-            # Run git command asynchronously with timeout
-            try:
-                # Use asyncio.create_subprocess_exec for non-blocking execution
-                process = await asyncio.create_subprocess_exec(
-                    *cmd,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-
-                # Wait for completion with timeout
-                stdout, stderr = await asyncio.wait_for(
-                    process.communicate(), timeout=60.0
-                )
-
-                if process.returncode != 0:
-                    stderr_text = stderr.decode() if stderr else ""
-                    logger.error(
-                        f"Git command failed with return code {process.returncode}"
+            if result.returncode != 0:
+                if result.returncode == 128:
+                    logger.debug("No commits found between branches (return code 128)")
+                    return []
+                else:
+                    raise Exception(
+                        f"Git command failed with return code {result.returncode}: {stderr.decode()}"
                     )
-                    if stderr_text:
-                        logger.error(f"Git stderr: {stderr_text}")
-                    if process.returncode == 128:
-                        # This usually means no commits found between branches
-                        logger.debug(
-                            "No commits found between branches (return code 128)"
-                        )
-                        return []
-                    else:
-                        raise Exception(
-                            f"Git command failed with return code {process.returncode}: {stderr_text}"
-                        )
 
-            except asyncio.TimeoutError:
-                logger.error("Async git command timed out after 60s")
-                # Try to terminate the process if it's still running
-                if process and process.returncode is None:
-                    try:
-                        process.terminate()
-                        await asyncio.wait_for(process.wait(), timeout=5.0)
-                    except asyncio.TimeoutError:
-                        process.kill()
-                        await process.wait()
-                raise TimeoutError("Git command timed out after 60 seconds")
-
+            output = stdout.decode()
             git_time = time.time() - start_time
-            logger.debug(f"Async git command completed in {git_time:.2f}s")
-
-            output = stdout.decode().strip()
-            logger.debug(f"Git output length: {len(output)} characters")
+            logger.debug(f"Git command completed in {git_time:.2f}s")
 
             if not output:
                 logger.debug("No git output found, returning empty list")
                 return []
 
-            # Parse the output using modern Python techniques
             parse_start = time.time()
             commits = await self._parse_git_output_modern(output)
             parse_time = time.time() - parse_start
@@ -199,14 +206,14 @@ class GitLogAnalyzer:
             )
 
             total_time = time.time() - start_time
-            logger.debug(f"Total async git log retrieval time: {total_time:.2f}s")
+            logger.debug(f"Total git log retrieval time: {total_time:.2f}s")
             return commits
 
-        except TimeoutError:
+        except asyncio.TimeoutError:
             logger.error("Async operation timed out")
-            raise
+            raise TimeoutError("Git command timed out after 60 seconds")
         except Exception as e:
-            logger.error(f"Unexpected error in async get_git_log: {e}")
+            logger.error(f"Unexpected error in get_git_log: {e}")
             raise Exception(f"Unexpected error getting git log: {e}")
 
     async def _parse_git_output_modern(self, output: str) -> List[CommitInfo]:

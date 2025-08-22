@@ -1,8 +1,7 @@
 """Tests for the GitLogAnalyzer class."""
 
 import pytest
-from unittest.mock import Mock, patch
-from unittest.mock import AsyncMock
+from unittest.mock import Mock, patch, AsyncMock, MagicMock
 
 from mcp_mr_summarizer.analyzer import GitLogAnalyzer
 from mcp_mr_summarizer.models import CommitInfo
@@ -187,21 +186,28 @@ class TestGitLogAnalyzer:
     @pytest.mark.asyncio
     async def test_get_git_log_success(self):
         """Test successful git log retrieval."""
-        with patch("asyncio.create_subprocess_exec") as mock_subprocess:
+        with patch("asyncio.create_subprocess_exec") as mock_create_subprocess:
             # Mock for _validate_branches
-            mock_validate_process = AsyncMock()
+            mock_validate_process = MagicMock()
             mock_validate_process.returncode = 0
-            mock_validate_process.communicate.return_value = (b"main\nfeature\n", b"")
-
-            # Mock for get_git_log
-            mock_log_process = AsyncMock()
-            mock_log_process.returncode = 0
-            mock_log_process.communicate.return_value = (
-                b"abc1234567890123456789012345678901234567\nTest Author\n2023-01-01\nTest commit\n\nfile1.py | 10 +++++-----\n",
-                b"",
+            mock_validate_process.communicate = AsyncMock(
+                return_value=(b"main\nfeature\n", b"")
             )
 
-            mock_subprocess.side_effect = [mock_validate_process, mock_log_process]
+            # Mock for get_git_log
+            mock_log_process = MagicMock()
+            mock_log_process.returncode = 0
+            mock_log_process.communicate = AsyncMock(
+                return_value=(
+                    b"abc1234567890123456789012345678901234567\nTest Author\n2023-01-01\nTest commit\n\nfile1.py | 10 +++++-----\n",
+                    b"",
+                )
+            )
+
+            mock_create_subprocess.side_effect = [
+                mock_validate_process,
+                mock_log_process,
+            ]
 
             commits = await self.analyzer.get_git_log("main", "feature")
             assert isinstance(commits, list)
@@ -211,18 +217,25 @@ class TestGitLogAnalyzer:
     @pytest.mark.asyncio
     async def test_get_git_log_failure(self):
         """Test git log retrieval failure."""
-        with patch("asyncio.create_subprocess_exec") as mock_subprocess:
+        with patch("asyncio.create_subprocess_exec") as mock_create_subprocess:
             # Mock for _validate_branches (successful)
-            mock_validate_process = AsyncMock()
+            mock_validate_process = MagicMock()
             mock_validate_process.returncode = 0
-            mock_validate_process.communicate.return_value = (b"main\nfeature\n", b"")
+            mock_validate_process.communicate = AsyncMock(
+                return_value=(b"main\nfeature\n", b"")
+            )
 
             # Mock for get_git_log (failure)
-            mock_log_process = AsyncMock()
+            mock_log_process = MagicMock()
             mock_log_process.returncode = 1
-            mock_log_process.communicate.return_value = (b"", b"fatal: bad revision")
+            mock_log_process.communicate = AsyncMock(
+                return_value=(b"", b"fatal: bad revision")
+            )
 
-            mock_subprocess.side_effect = [mock_validate_process, mock_log_process]
+            mock_create_subprocess.side_effect = [
+                mock_validate_process,
+                mock_log_process,
+            ]
 
             with pytest.raises(Exception, match="Unexpected error getting git log"):
                 await self.analyzer.get_git_log("main", "feature")
