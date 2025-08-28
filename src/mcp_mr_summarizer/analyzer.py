@@ -70,6 +70,7 @@ class GitLogAnalyzer:
         try:
             result = await asyncio.create_subprocess_exec(
                 "git",
+                "--no-pager",
                 "-C",
                 self.repo_path,
                 "rev-parse",
@@ -83,12 +84,17 @@ class GitLogAnalyzer:
                 raise ValueError(f"Not a valid git repository: {self.repo_path}")
 
             # Additional validation: check if we can get the repository root
-            result = await asyncio.create_subprocess_exec(
+            cmd = [
                 "git",
+                "--no-pager",
                 "-C",
                 self.repo_path,
                 "rev-parse",
                 "--show-toplevel",
+            ]
+
+            result = await asyncio.create_subprocess_exec(
+                *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -115,7 +121,16 @@ class GitLogAnalyzer:
             )
             return
 
-        cmd = ["git", "-C", self.repo_path, "branch", "-a", "--format=%(refname:short)"]
+        cmd = [
+            "git",
+            "--no-pager",
+            "-C",
+            self.repo_path,
+            "branch",
+            "-a",
+            "--format=%(refname:short)",
+        ]
+        logger.debug(f"Executing branch validation command: {' '.join(cmd)}")
 
         try:
             result = await asyncio.create_subprocess_exec(
@@ -126,9 +141,22 @@ class GitLogAnalyzer:
             stdout, stderr = await asyncio.wait_for(result.communicate(), timeout=30.0)
 
             if result.returncode != 0:
-                raise Exception(f"Failed to get branches: {stderr.decode()}")
+                stderr_output = stderr.decode() if stderr else "No stderr output"
+                logger.error(
+                    f"Branch validation command failed with return code {result.returncode}: {stderr_output}"
+                )
+                raise Exception(f"Failed to get branches: {stderr_output}")
 
-            available_branches = set(stdout.decode().strip().split("\n"))
+            stdout_output = stdout.decode().strip()
+            logger.debug(f"Branch validation output: {stdout_output}")
+
+            if not stdout_output:
+                logger.warning("No branches found in repository")
+                available_branches = set()
+            else:
+                available_branches = set(stdout_output.split("\n"))
+
+            logger.debug(f"Available branches: {available_branches}")
 
             # Check if branches exist
             missing_branches = []
@@ -138,12 +166,21 @@ class GitLogAnalyzer:
                 missing_branches.append(current_branch)
 
             if missing_branches:
+                logger.error(f"Missing branches: {missing_branches}")
+                logger.error(f"Available branches: {sorted(available_branches)}")
                 raise ValueError(
                     f"Branch(es) not found: {', '.join(missing_branches)}. Available branches: {', '.join(sorted(available_branches))}"
                 )
+
+            logger.debug(
+                f"Branch validation successful for {base_branch} and {current_branch}"
+            )
+
         except asyncio.TimeoutError:
+            logger.error("Branch validation timed out after 30 seconds")
             raise TimeoutError("Branch validation timed out")
         except FileNotFoundError:
+            logger.error("Git command not found")
             raise Exception(
                 "Git command not found. Please ensure git is installed and in your PATH."
             )
@@ -153,6 +190,7 @@ class GitLogAnalyzer:
             # Re-raise TimeoutError directly
             if isinstance(e, TimeoutError):
                 raise
+            logger.error(f"Unexpected error in branch validation: {e}")
             raise Exception(f"Error validating branches: {e}")
 
     async def get_git_log(
@@ -171,6 +209,7 @@ class GitLogAnalyzer:
 
             cmd = [
                 "git",
+                "--no-pager",
                 "-C",
                 self.repo_path,
                 "log",

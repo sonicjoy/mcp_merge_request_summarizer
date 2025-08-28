@@ -30,6 +30,7 @@ class GitResources:
             try:
                 result = await asyncio.create_subprocess_exec(
                     "git",
+                    "--no-pager",
                     "rev-parse",
                     "--git-dir",
                     stdout=asyncio.subprocess.PIPE,
@@ -45,6 +46,7 @@ class GitResources:
             # Get current branch
             result = await asyncio.create_subprocess_exec(
                 "git",
+                "--no-pager",
                 "branch",
                 "--show-current",
                 stdout=asyncio.subprocess.PIPE,
@@ -58,6 +60,7 @@ class GitResources:
             try:
                 result = await asyncio.create_subprocess_exec(
                     "git",
+                    "--no-pager",
                     "config",
                     "--get",
                     "remote.origin.url",
@@ -73,6 +76,7 @@ class GitResources:
             # Get repository name
             result = await asyncio.create_subprocess_exec(
                 "git",
+                "--no-pager",
                 "rev-parse",
                 "--show-toplevel",
                 stdout=asyncio.subprocess.PIPE,
@@ -85,6 +89,7 @@ class GitResources:
             # Check if working directory is dirty
             result = await asyncio.create_subprocess_exec(
                 "git",
+                "--no-pager",
                 "status",
                 "--porcelain",
                 stdout=asyncio.subprocess.PIPE,
@@ -97,6 +102,7 @@ class GitResources:
             # Count untracked files
             result = await asyncio.create_subprocess_exec(
                 "git",
+                "--no-pager",
                 "ls-files",
                 "--others",
                 "--exclude-standard",
@@ -114,6 +120,7 @@ class GitResources:
             # Count staged changes
             result = await asyncio.create_subprocess_exec(
                 "git",
+                "--no-pager",
                 "diff",
                 "--cached",
                 "--name-only",
@@ -131,6 +138,7 @@ class GitResources:
             # Count unstaged changes
             result = await asyncio.create_subprocess_exec(
                 "git",
+                "--no-pager",
                 "diff",
                 "--name-only",
                 stdout=asyncio.subprocess.PIPE,
@@ -191,6 +199,7 @@ class GitResources:
             try:
                 result = await asyncio.create_subprocess_exec(
                     "git",
+                    "--no-pager",
                     "rev-parse",
                     "--git-dir",
                     stdout=asyncio.subprocess.PIPE,
@@ -206,6 +215,7 @@ class GitResources:
             # Get current branch
             result = await asyncio.create_subprocess_exec(
                 "git",
+                "--no-pager",
                 "branch",
                 "--show-current",
                 stdout=asyncio.subprocess.PIPE,
@@ -218,6 +228,7 @@ class GitResources:
             # Get local branches
             result = await asyncio.create_subprocess_exec(
                 "git",
+                "--no-pager",
                 "branch",
                 "--format=%(refname:short)",
                 stdout=asyncio.subprocess.PIPE,
@@ -234,6 +245,7 @@ class GitResources:
             # Get remote branches
             result = await asyncio.create_subprocess_exec(
                 "git",
+                "--no-pager",
                 "branch",
                 "-r",
                 "--format=%(refname:short)",
