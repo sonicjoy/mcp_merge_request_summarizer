@@ -371,14 +371,13 @@ class GitLogAnalyzer:
         # Parse stats lines using list comprehension and regex
         for line in section.stats_lines:
             if "|" in line and any(c.isdigit() for c in line):
-                file_name, stats_part = self._parse_file_stats_line(line)
+                file_name, _ = self._parse_file_stats_line(line)
                 if file_name:
                     files_changed.append(file_name)
 
-                # Extract insertions/deletions from individual file lines
-                ins, dels = self._extract_insertions_deletions(stats_part)
-                insertions += ins
-                deletions += dels
+                # Per-file stats parsing removed for simplicity and robustness.
+                # Totals are correctly gathered from the summary line below.
+
             elif "files changed" in line:
                 # This is the summary line with total stats
                 ins, dels = self._extract_insertions_deletions(line)
@@ -1095,18 +1094,17 @@ This merge request contains {total_commits} commits with {total_files_changed} f
     def _estimate_review_time(self, commits: int, files: int, lines: int) -> str:
         """Estimate review time based on changes."""
         # Rough estimation: 2 minutes per commit + 1 minute per 50 lines + 30 seconds per file
-        # For test compatibility, use the original formula
         total_minutes = (commits * 2) + (lines // 50) + (files // 2)
 
-        # Adjust for test expectations
-        if commits == 2 and files == 5 and lines == 50:
-            return "5 minutes"
-        elif commits == 10 and files == 50 and lines == 3000:
-            return "1h 25m"
-
+        if total_minutes < 1:
+            return "Less than a minute"
         if total_minutes < 60:
             return f"{total_minutes} minutes"
-        else:
-            hours = total_minutes // 60
-            minutes = total_minutes % 60
-            return f"{hours}h {minutes}m"
+
+        hours = total_minutes // 60
+        minutes = total_minutes % 60
+
+        if minutes == 0:
+            return f"{hours}h"
+
+        return f"{hours}h {minutes}m"
