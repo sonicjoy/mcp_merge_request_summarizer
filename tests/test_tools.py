@@ -54,7 +54,7 @@ class TestGitTools:
         )
 
         self.tools.analyzer.get_git_log = AsyncMock(return_value=mock_commits)
-        self.tools.analyzer.generate_summary = AsyncMock(return_value=mock_summary)
+        self.tools.analyzer.generate_summary = Mock(return_value=mock_summary)
 
         result = await self.tools.generate_merge_request_summary(
             "main", "feature", ".", "markdown"
@@ -95,7 +95,7 @@ class TestGitTools:
         )
 
         self.tools.analyzer.get_git_log = AsyncMock(return_value=mock_commits)
-        self.tools.analyzer.generate_summary = AsyncMock(return_value=mock_summary)
+        self.tools.analyzer.generate_summary = Mock(return_value=mock_summary)
 
         result = await self.tools.generate_merge_request_summary(
             "main", "feature", ".", "json"
@@ -131,7 +131,7 @@ class TestGitTools:
         with patch("mcp_mr_summarizer.tools.GitLogAnalyzer") as mock_analyzer_class:
             mock_analyzer_instance = Mock()
             mock_analyzer_instance.get_git_log = AsyncMock(return_value=mock_commits)
-            mock_analyzer_instance.generate_summary = AsyncMock(
+            mock_analyzer_instance.generate_summary = Mock(
                 return_value=mock_summary
             )
             mock_analyzer_class.return_value = mock_analyzer_instance

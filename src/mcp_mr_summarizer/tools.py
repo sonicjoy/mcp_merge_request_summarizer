@@ -68,11 +68,11 @@ class GitTools:
                         f"No commits found between {base_branch} and {current_branch}."
                     )
 
-                logger.debug("Calling async analyzer.generate_summary...")
+                logger.debug("Calling analyzer.generate_summary...")
                 summary_start = time.time()
-                summary = await self.analyzer.generate_summary(commits)
+                summary = self.analyzer.generate_summary(commits)
                 summary_time = time.time() - summary_start
-                logger.debug(f"async generate_summary completed in {summary_time:.2f}s")
+                logger.debug(f"generate_summary completed in {summary_time:.2f}s")
 
                 if format == "json":
                     logger.debug("Returning JSON format")

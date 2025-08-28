@@ -140,18 +140,16 @@ class TestGitLogAnalyzer:
         title = self.analyzer._generate_title(commits, new_features, [], [])
         assert title == "feat: 2 new features and improvements"
 
-    @pytest.mark.asyncio
-    async def test_generate_summary_no_commits(self):
+    def test_generate_summary_no_commits(self):
         """Test summary generation with no commits."""
-        summary = await self.analyzer.generate_summary([])
+        summary = self.analyzer.generate_summary([])
 
         assert summary.title == "No changes detected"
         assert summary.total_commits == 0
         assert summary.total_files_changed == 0
         assert summary.estimated_review_time == "0 minutes"
 
-    @pytest.mark.asyncio
-    async def test_generate_summary_with_commits(self):
+    def test_generate_summary_with_commits(self):
         """Test summary generation with commits."""
         commits = [
             CommitInfo(
@@ -174,7 +172,7 @@ class TestGitLogAnalyzer:
             ),
         ]
 
-        summary = await self.analyzer.generate_summary(commits)
+        summary = self.analyzer.generate_summary(commits)
 
         assert summary.total_commits == 2
         assert summary.total_files_changed == 2

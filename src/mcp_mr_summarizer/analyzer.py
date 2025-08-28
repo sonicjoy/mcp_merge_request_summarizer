@@ -199,7 +199,7 @@ class GitLogAnalyzer:
                 return []
 
             parse_start = time.time()
-            commits = await self._parse_git_output_modern(output)
+            commits = self._parse_git_output_sync_modern(output)
             parse_time = time.time() - parse_start
             logger.debug(
                 f"Modern async parsing completed in {parse_time:.2f}s, found {len(commits)} commits"
@@ -215,14 +215,6 @@ class GitLogAnalyzer:
         except Exception as e:
             logger.error(f"Unexpected error in get_git_log: {e}")
             raise Exception(f"Unexpected error getting git log: {e}")
-
-    async def _parse_git_output_modern(self, output: str) -> List[CommitInfo]:
-        """Parse git output using modern Python techniques."""
-        # Run parsing in a thread pool to avoid blocking
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, self._parse_git_output_sync_modern, output
-        )
 
     def _parse_git_output_sync_modern(self, output: str) -> List[CommitInfo]:
         """Modern synchronous parsing of git output using iterators and generators."""
@@ -596,7 +588,7 @@ class GitLogAnalyzer:
 
         return categories
 
-    async def generate_summary(self, commits: List[CommitInfo]) -> MergeRequestSummary:
+    def generate_summary(self, commits: List[CommitInfo]) -> MergeRequestSummary:
         """Generate a comprehensive merge request summary asynchronously."""
         if not commits:
             return MergeRequestSummary(
@@ -615,9 +607,7 @@ class GitLogAnalyzer:
                 estimated_review_time="0 minutes",
             )
 
-        # Run summary generation in thread pool to avoid blocking
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self._generate_summary_sync, commits)
+        return self._generate_summary_sync(commits)
 
     def _generate_summary_sync(self, commits: List[CommitInfo]) -> MergeRequestSummary:
         """Synchronous summary generation (runs in thread pool)."""
