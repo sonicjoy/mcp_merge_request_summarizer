@@ -4,6 +4,7 @@ import time
 import sys
 import asyncio
 import logging
+import os
 from mcp.server.fastmcp import FastMCP
 
 from .analyzer import GitLogAnalyzer
@@ -17,12 +18,17 @@ setup_logging()
 # Create logger for this module
 logger = logging.getLogger(__name__)
 
+# Get the directory of the current script to determine the repo root
+# This makes the server more robust when run from different working directories
+script_dir = os.path.dirname(os.path.abspath(__file__))
+repo_root = os.path.abspath(os.path.join(script_dir, "..", ".."))
+
 # Create an MCP server
 mcp = FastMCP("merge-request-summarizer")
 
 # Initialize resources and tools (these don't require git validation on import)
-resources = GitResources()
-tools = GitTools()
+resources = GitResources(repo_path=repo_root)
+tools = GitTools(repo_path=repo_root)
 
 # Initialize analyzer lazily to avoid validation errors on import
 _analyzer = None
@@ -32,7 +38,7 @@ def get_analyzer():
     """Get or create the analyzer instance."""
     global _analyzer
     if _analyzer is None:
-        _analyzer = GitLogAnalyzer()
+        _analyzer = GitLogAnalyzer(repo_path=repo_root)
     return _analyzer
 
 
