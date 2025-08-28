@@ -23,7 +23,7 @@ async def main() -> None:
         "summary", help="Generate merge request summary"
     )
     summary_parser.add_argument(
-        "--base", default="develop", help="Base branch (default: develop)"
+        "--base", default="master", help="Base branch (default: master)"
     )
     summary_parser.add_argument(
         "--current", default="HEAD", help="Current branch (default: HEAD)"
@@ -42,7 +42,7 @@ async def main() -> None:
     # Analyze command
     analyze_parser = subparsers.add_parser("analyze", help="Analyze git commits")
     analyze_parser.add_argument(
-        "--base", default="develop", help="Base branch (default: develop)"
+        "--base", default="master", help="Base branch (default: master)"
     )
     analyze_parser.add_argument(
         "--current", default="HEAD", help="Current branch (default: HEAD)"
@@ -69,7 +69,7 @@ async def main() -> None:
     # Commits command
     commits_parser = subparsers.add_parser("commits", help="Get commit history")
     commits_parser.add_argument(
-        "--base", default="develop", help="Base branch (default: develop)"
+        "--base", default="master", help="Base branch (default: master)"
     )
     commits_parser.add_argument(
         "--current", default="HEAD", help="Current branch (default: HEAD)"
@@ -82,7 +82,7 @@ async def main() -> None:
     # Files command
     files_parser = subparsers.add_parser("files", help="Get changed files")
     files_parser.add_argument(
-        "--base", default="develop", help="Base branch (default: develop)"
+        "--base", default="master", help="Base branch (default: master)"
     )
     files_parser.add_argument(
         "--current", default="HEAD", help="Current branch (default: HEAD)"

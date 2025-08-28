@@ -108,6 +108,13 @@ class GitLogAnalyzer:
 
     async def _validate_branches(self, base_branch: str, current_branch: str) -> None:
         """Validate that the specified branches exist in the repository."""
+        # Skip validation for commit hashes (40-character hex strings)
+        if self._is_commit_hash(base_branch) or self._is_commit_hash(current_branch):
+            logger.debug(
+                f"Skipping branch validation for commit hashes: {base_branch}, {current_branch}"
+            )
+            return
+
         cmd = ["git", "-C", self.repo_path, "branch", "-a", "--format=%(refname:short)"]
 
         try:
@@ -329,10 +336,15 @@ class GitLogAnalyzer:
                 if file_name:
                     files_changed.append(file_name)
 
-                # Extract insertions/deletions
+                # Extract insertions/deletions from individual file lines
                 ins, dels = self._extract_insertions_deletions(stats_part)
                 insertions += ins
                 deletions += dels
+            elif "files changed" in line:
+                # This is the summary line with total stats
+                ins, dels = self._extract_insertions_deletions(line)
+                insertions = ins  # Use the total from summary line
+                deletions = dels
 
         return CommitInfo(
             hash=section.hash,
@@ -353,29 +365,43 @@ class GitLogAnalyzer:
         file_name = parts[0].strip()
         stats_part = parts[1].strip()
 
-        # Skip summary lines (like "...")
+        # Handle abbreviated file paths (like ".../Generic/IStatsPlayerFixtureStatsService.cs")
         if file_name.startswith("..."):
-            return None, stats_part
+            # This is an abbreviated path, we need to get the full path
+            # For now, we'll include it as-is since we don't have the full path context
+            # The user can see the abbreviated path which is still useful
+            return file_name, stats_part
 
         return file_name, stats_part
 
     def _extract_insertions_deletions(self, stats_part: str) -> Tuple[int, int]:
         """Extract insertions and deletions from stats part."""
-        stats_match = re.search(
-            r"(\d+)\s+insertions?,\s*(\d+)\s+deletions?",
-            stats_part,
-        )
-        if stats_match:
-            return int(stats_match.group(1)), int(stats_match.group(2))
-        return 0, 0
+        # Try multiple patterns to match different git stat formats
+        patterns = [
+            r"(\d+)\s+insertions?\(\+\),\s*(\d+)\s+deletions?\(-\)",  # "13 insertions(+), 25 deletions(-)"
+            r"(\d+)\s+insertions?,\s*(\d+)\s+deletions?",  # "13 insertions, 25 deletions"
+            r"(\d+)\s+insertions?\(\+\)",  # "13 insertions(+)" (insertions only)
+            r"(\d+)\s+deletions?\(-\)",  # "25 deletions(-)" (deletions only)
+        ]
 
-    # Keep the old method for backward compatibility
-    async def _parse_git_output(self, output: str) -> List[CommitInfo]:
-        """Legacy parsing method for backward compatibility."""
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self._parse_git_output_sync, output)
+        insertions = 0
+        deletions = 0
 
-    def _parse_git_output_sync(self, output: str) -> List[CommitInfo]:
+        for pattern in patterns:
+            stats_match = re.search(pattern, stats_part)
+            if stats_match:
+                if "insertions" in pattern:
+                    insertions = int(stats_match.group(1))
+                if "deletions" in pattern:
+                    deletions = int(stats_match.group(1))
+                # If pattern has both groups, use them
+                if stats_match.groups() and len(stats_match.groups()) >= 2:
+                    insertions = int(stats_match.group(1))
+                    deletions = int(stats_match.group(2))
+
+        return insertions, deletions
+
+    def _parse_git_output(self, output: str) -> List[CommitInfo]:
         """Legacy synchronous parsing of git output (runs in thread pool)."""
         commits = []
         lines = output.split("\n")
@@ -431,18 +457,63 @@ class GitLogAnalyzer:
                             parts = line.split("|")
                             if len(parts) >= 2:
                                 file_name = parts[0].strip()
-                                if file_name and not file_name.startswith("..."):
+                                if file_name:
+                                    # Include abbreviated paths (like ".../Generic/IStatsPlayerFixtureStatsService.cs")
                                     files_changed.append(file_name)
 
                                 # Parse insertions/deletions from the stats part
                                 stats_part = parts[1].strip()
-                                stats_match = re.search(
-                                    r"(\d+)\s+insertions?,\s*(\d+)\s+deletions?",
-                                    stats_part,
-                                )
+                                # Try multiple patterns to match different git stat formats
+                                patterns = [
+                                    r"(\d+)\s+insertions?\(\+\),\s*(\d+)\s+deletions?\(-\)",  # "13 insertions(+), 25 deletions(-)"
+                                    r"(\d+)\s+insertions?,\s*(\d+)\s+deletions?",  # "13 insertions, 25 deletions"
+                                    r"(\d+)\s+insertions?\(\+\)",  # "13 insertions(+)" (insertions only)
+                                    r"(\d+)\s+deletions?\(-\)",  # "25 deletions(-)" (deletions only)
+                                ]
+
+                                for pattern in patterns:
+                                    stats_match = re.search(pattern, stats_part)
+                                    if stats_match:
+                                        if "insertions" in pattern:
+                                            insertions += int(stats_match.group(1))
+                                        if "deletions" in pattern:
+                                            deletions += int(stats_match.group(1))
+                                        # If pattern has both groups, use them
+                                        if (
+                                            stats_match.groups()
+                                            and len(stats_match.groups()) >= 2
+                                        ):
+                                            insertions += int(stats_match.group(1))
+                                            deletions += int(stats_match.group(2))
+                                        break
+                        elif "files changed" in line:
+                            # This is the summary line with total stats
+                            patterns = [
+                                r"(\d+)\s+insertions?\(\+\),\s*(\d+)\s+deletions?\(-\)",  # "13 insertions(+), 25 deletions(-)"
+                                r"(\d+)\s+insertions?,\s*(\d+)\s+deletions?",  # "13 insertions, 25 deletions"
+                                r"(\d+)\s+insertions?\(\+\)",  # "13 insertions(+)" (insertions only)
+                                r"(\d+)\s+deletions?\(-\)",  # "25 deletions(-)" (deletions only)
+                            ]
+
+                            for pattern in patterns:
+                                stats_match = re.search(pattern, line)
                                 if stats_match:
-                                    insertions += int(stats_match.group(1))
-                                    deletions += int(stats_match.group(2))
+                                    if "insertions" in pattern:
+                                        insertions = int(
+                                            stats_match.group(1)
+                                        )  # Use total from summary
+                                    if "deletions" in pattern:
+                                        deletions = int(
+                                            stats_match.group(1)
+                                        )  # Use total from summary
+                                    # If pattern has both groups, use them
+                                    if (
+                                        stats_match.groups()
+                                        and len(stats_match.groups()) >= 2
+                                    ):
+                                        insertions = int(stats_match.group(1))
+                                        deletions = int(stats_match.group(2))
+                                    break
 
                         j += 1
 
