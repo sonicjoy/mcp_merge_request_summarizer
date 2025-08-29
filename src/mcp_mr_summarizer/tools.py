@@ -2,12 +2,10 @@
 
 import json
 import time
-import asyncio
 import logging
 from dataclasses import dataclass, asdict
-from typing import Dict, Any, Optional, Callable, Awaitable
+from typing import Dict, Any, Optional, Callable
 from collections import defaultdict, Counter
-from contextlib import asynccontextmanager
 
 from .analyzer import GitLogAnalyzer
 
@@ -79,8 +77,8 @@ class GitTools:
             self._analyzer = self._analyzer_factory(self.repo_path)
         return self._analyzer
 
-    async def _with_repo_path_update(
-        self, repo_path: str, operation: Callable[[], Awaitable[Any]]
+    def _with_repo_path_update(
+        self, repo_path: str, operation: Callable[[], Any]
     ) -> Any:
         """Execute operation with repo path update if needed."""
         if repo_path != self.repo_path:
@@ -89,35 +87,34 @@ class GitTools:
             )
             self._analyzer = self._analyzer_factory(repo_path)
             self.repo_path = repo_path
-        return await operation()
+        return operation()
 
-    async def _with_error_handling(
-        self, operation: Callable[[], Awaitable[Any]], operation_name: str
+    def _with_error_handling(
+        self, operation: Callable[[], Any], operation_name: str
     ) -> Any:
         """Execute operation with standardized error handling."""
         start_time = time.time()
         logger.debug(f"Starting {operation_name}")
 
         try:
-            result = await operation()
+            result = operation()
             total_time = time.time() - start_time
             logger.debug(f"{operation_name} completed in {total_time:.2f}s")
             return result
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(f"{operation_name} timed out")
             raise GitTimeoutError(f"Git operation timed out during {operation_name}")
         except Exception as e:
             logger.error(f"Error in {operation_name}: {e}")
             raise GitAnalysisError(f"Error during {operation_name}: {str(e)}")
 
-    @asynccontextmanager
-    async def git_analysis_session(self, repo_path: str):
+    def git_analysis_session(self, repo_path: str):
         """Context manager for git analysis sessions."""
         try:
             analyzer = self._get_analyzer(repo_path)
             yield analyzer
         finally:
-            await self._cleanup_resources()
+            self._cleanup_resources()
 
     def _get_analyzer(self, repo_path: str):
         """Get analyzer for specific repo path."""
@@ -125,37 +122,37 @@ class GitTools:
             return self._analyzer_factory(repo_path)
         return self.analyzer
 
-    async def _cleanup_resources(self):
+    def _cleanup_resources(self):
         """Clean up resources after analysis."""
         # Currently no cleanup needed, but provides hook for future resource management
         pass
 
-    async def generate_merge_request_summary(
+    def generate_merge_request_summary(
         self,
         base_branch: str = "master",
         current_branch: str = "HEAD",
         repo_path: str = ".",
         format: str = "markdown",
     ) -> str:
-        """Generate a comprehensive merge request summary from git logs asynchronously."""
+        """Generate a comprehensive merge request summary from git logs."""
 
-        async def _generate_summary():
-            return await self._with_repo_path_update(
+        def _generate_summary():
+            return self._with_repo_path_update(
                 repo_path,
                 lambda: self._generate_summary_internal(
                     base_branch, current_branch, format
                 ),
             )
 
-        return await self._with_error_handling(
+        return self._with_error_handling(
             _generate_summary, "generate_merge_request_summary"
         )
 
-    async def _generate_summary_internal(
+    def _generate_summary_internal(
         self, base_branch: str, current_branch: str, format: str
     ) -> str:
         """Internal implementation of summary generation."""
-        commits = await self.analyzer.get_git_log(base_branch, current_branch)
+        commits = self.analyzer.get_git_log(base_branch, current_branch)
 
         if not commits:
             return f"No commits found between {base_branch} and {current_branch}."
@@ -167,36 +164,36 @@ class GitTools:
         else:
             return f"# {summary.title}\n\n{summary.description}"
 
-    async def analyze_git_commits(
+    def analyze_git_commits(
         self,
         base_branch: str = "master",
         current_branch: str = "HEAD",
         repo_path: str = ".",
     ) -> str:
-        """Analyze git commits and categorize them by type asynchronously."""
+        """Analyze git commits and categorize them by type."""
 
-        async def _analyze_commits():
-            return await self._with_repo_path_update(
+        def _analyze_commits():
+            return self._with_repo_path_update(
                 repo_path,
                 lambda: self._analyze_commits_internal(base_branch, current_branch),
             )
 
-        return await self._with_error_handling(_analyze_commits, "analyze_git_commits")
+        return self._with_error_handling(_analyze_commits, "analyze_git_commits")
 
-    async def _analyze_commits_internal(
+    def _analyze_commits_internal(
         self, base_branch: str, current_branch: str
     ) -> str:
         """Internal implementation of commit analysis."""
-        commits = await self.analyzer.get_git_log(base_branch, current_branch)
+        commits = self.analyzer.get_git_log(base_branch, current_branch)
 
         if not commits:
             return "No commits found between the specified branches."
 
-        analysis = await self._analyze_commits_async(commits)
-        return await self._generate_analysis_report_async(analysis)
+        analysis = self._analyze_commits(commits)
+        return self._generate_analysis_report(analysis)
 
-    async def _analyze_commits_async(self, commits) -> AnalysisResult:
-        """Analyze commits asynchronously with improved performance."""
+    def _analyze_commits(self, commits) -> AnalysisResult:
+        """Analyze commits synchronously with improved performance."""
         if len(commits) <= self.config.batch_size:
             return self._analyze_commits_sync(commits)
 
@@ -286,8 +283,8 @@ class GitTools:
 
         return merged
 
-    async def _generate_analysis_report_async(self, analysis: AnalysisResult) -> str:
-        """Generate analysis report asynchronously."""
+    def _generate_analysis_report(self, analysis: AnalysisResult) -> str:
+        """Generate analysis report."""
         # This is CPU-bound, so we can run it directly without executor
         return self._generate_analysis_report_sync(analysis)
 

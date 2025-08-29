@@ -1,7 +1,6 @@
 """MCP Server for generating merge request summaries from git logs."""
 
 import time
-import asyncio
 import logging
 from mcp.server.fastmcp import FastMCP
 
@@ -44,7 +43,7 @@ def get_agent_working_dir():
 
 # Tools - Actions that perform computation or analysis
 @mcp.tool()
-async def set_working_directory(working_directory: str) -> str:
+def set_working_directory(working_directory: str) -> str:
     """Set the working directory context for the MCP server.
 
     This allows the client agent to communicate its working directory
@@ -70,7 +69,7 @@ async def set_working_directory(working_directory: str) -> str:
 
 
 @mcp.tool()
-async def get_working_directory() -> str:
+def get_working_directory() -> str:
     """Get the current working directory context."""
     global _agent_working_dir
 
@@ -81,14 +80,14 @@ async def get_working_directory() -> str:
 
 
 @mcp.tool()
-async def generate_merge_request_summary(
+def generate_merge_request_summary(
     base_branch: str = "master",
     current_branch: str = "HEAD",
     format: str = "markdown",
 ) -> str:
     """Generate a comprehensive merge request summary from git logs"""
     start_time = time.time()
-    logger.debug("Async tool called: generate_merge_request_summary")
+    logger.debug("tool called: generate_merge_request_summary")
     logger.debug(
         f"Parameters: base_branch={base_branch}, current_branch={current_branch}, format={format}"
     )
@@ -101,12 +100,15 @@ async def generate_merge_request_summary(
 
         logger.debug(f"Using agent working directory: {agent_dir}")
 
-        result = await tools.generate_merge_request_summary(
-            agent_dir, base_branch, current_branch, format
+        result = tools.generate_merge_request_summary(
+            repo_path=agent_dir,
+            base_branch=base_branch,
+            current_branch=current_branch,
+            format=format,
         )
         total_time = time.time() - start_time
         logger.info(
-            f"Async tool completed: generate_merge_request_summary in {total_time:.2f}s"
+            f"tool completed: generate_merge_request_summary in {total_time:.2f}s"
         )
         return result
     except GitTimeoutError as e:
@@ -126,12 +128,12 @@ async def generate_merge_request_summary(
 
 
 @mcp.tool()
-async def analyze_git_commits(
+def analyze_git_commits(
     base_branch: str = "master", current_branch: str = "HEAD"
 ) -> str:
     """Analyze git commits and categorize them by type"""
     start_time = time.time()
-    logger.debug("Async tool called: analyze_git_commits")
+    logger.debug("tool called: analyze_git_commits")
     logger.debug(
         f"Parameters: base_branch={base_branch}, current_branch={current_branch}"
     )
@@ -144,9 +146,11 @@ async def analyze_git_commits(
 
         logger.debug(f"Using agent working directory: {agent_dir}")
 
-        result = await tools.analyze_git_commits(agent_dir, base_branch, current_branch)
+        result = tools.analyze_git_commits(
+            repo_path=agent_dir, base_branch=base_branch, current_branch=current_branch
+        )
         total_time = time.time() - start_time
-        logger.info(f"Async tool completed: analyze_git_commits in {total_time:.2f}s")
+        logger.info(f"tool completed: analyze_git_commits in {total_time:.2f}s")
         return result
     except GitTimeoutError as e:
         logger.error(f"Git timeout error in analyze_git_commits: {e}")
@@ -163,4 +167,4 @@ async def analyze_git_commits(
 
 
 if __name__ == "__main__":
-    asyncio.run(mcp.run_stdio_async())
+    mcp.run()

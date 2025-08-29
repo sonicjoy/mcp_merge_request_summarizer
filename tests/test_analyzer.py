@@ -1,8 +1,7 @@
 """Tests for the GitLogAnalyzer class."""
 
 import pytest
-import subprocess
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, MagicMock
 
 from mcp_mr_summarizer.analyzer import GitLogAnalyzer
 from mcp_mr_summarizer.models import CommitInfo
@@ -209,8 +208,7 @@ class TestGitLogAnalyzer:
         assert "Add new feature" in summary.new_features[0]
         assert "Fix bug in processor" in summary.bug_fixes[0]
 
-    @pytest.mark.asyncio
-    async def test_get_git_log_success(self):
+    def test_get_git_log_success(self):
         """Test successful git log retrieval."""
         mock_log_result = MagicMock()
         mock_log_result.returncode = 0
@@ -224,19 +222,16 @@ class TestGitLogAnalyzer:
         )
         mock_log_result.stderr = ""
 
-        # Mock _is_testing to force validation
-        with patch.object(GitLogAnalyzer, "_is_testing", return_value=False):
-            with patch.object(
-                GitLogAnalyzer, "_validate_repo_path", new_callable=AsyncMock
-            ):
-                with patch.object(
-                    GitLogAnalyzer, "_validate_branches", new_callable=AsyncMock
-                ):
-                    with patch.object(
-                        GitLogAnalyzer, "_execute_git_command"
-                    ) as mock_execute:
-                        mock_execute.return_value = mock_log_result
-                        commits = await self.analyzer.get_git_log("main", "feature")
+        # Mock the git command execution to avoid actual git operations
+        with patch.object(self.analyzer, "_execute_git_command") as mock_execute:
+            # First call is for branch validation, second call is for git log
+            mock_execute.side_effect = [
+                MagicMock(
+                    returncode=0, stdout="main\nfeature\n", stderr=""
+                ),  # Branch validation
+                mock_log_result,  # Git log
+            ]
+            commits = self.analyzer.get_git_log("main", "feature")
 
         assert isinstance(commits, list)
         assert len(commits) == 1
@@ -245,25 +240,21 @@ class TestGitLogAnalyzer:
         assert commits[0].deletions == 5
         assert "src/main.py" in commits[0].files_changed
 
-    @pytest.mark.asyncio
-    async def test_get_git_log_failure(self):
+    def test_get_git_log_failure(self):
         """Test git log retrieval failure."""
         mock_log_result = MagicMock()
         mock_log_result.returncode = 1
         mock_log_result.stdout = ""
         mock_log_result.stderr = "fatal: bad revision"
 
-        # Mock _is_testing to force validation
-        with patch.object(GitLogAnalyzer, "_is_testing", return_value=False):
-            with patch.object(
-                GitLogAnalyzer, "_validate_repo_path", new_callable=AsyncMock
-            ):
-                with patch.object(
-                    GitLogAnalyzer, "_validate_branches", new_callable=AsyncMock
-                ):
-                    with patch.object(
-                        GitLogAnalyzer, "_execute_git_command"
-                    ) as mock_execute:
-                        mock_execute.return_value = mock_log_result
-                        with pytest.raises(Exception, match="Git command failed"):
-                            await self.analyzer.get_git_log("main", "feature")
+        # Mock the git command execution to avoid actual git operations
+        with patch.object(self.analyzer, "_execute_git_command") as mock_execute:
+            # First call is for branch validation, second call is for git log
+            mock_execute.side_effect = [
+                MagicMock(
+                    returncode=0, stdout="main\nfeature\n", stderr=""
+                ),  # Branch validation
+                mock_log_result,  # Git log
+            ]
+            with pytest.raises(Exception, match="Git command failed"):
+                self.analyzer.get_git_log("main", "feature")

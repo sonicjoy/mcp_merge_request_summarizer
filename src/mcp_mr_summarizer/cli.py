@@ -1,14 +1,11 @@
 """Command-line interface for the MCP merge request summarizer."""
 
 import argparse
-import json
 import sys
-import asyncio
 from .tools import GitTools
-from .resources import GitResources
 
 
-async def main() -> None:
+def main() -> None:
     """Main function for command-line usage."""
     parser = argparse.ArgumentParser(
         description="MCP Merge Request Summarizer - Git analysis tools and resources",
@@ -105,24 +102,12 @@ async def main() -> None:
     try:
         if args.command == "summary":
             tools = GitTools(args.repo)
-            output = await tools.generate_merge_request_summary(
+            output = tools.generate_merge_request_summary(
                 args.base, args.current, args.repo, args.format
             )
         elif args.command == "analyze":
             tools = GitTools(args.repo)
-            output = await tools.analyze_git_commits(args.base, args.current, args.repo)
-        elif args.command == "status":
-            resources = GitResources(args.repo)
-            output = await resources.get_repo_status()
-        elif args.command == "branches":
-            resources = GitResources(args.repo)
-            output = await resources.get_branches()
-        elif args.command == "commits":
-            resources = GitResources(args.repo)
-            output = await resources.get_commit_history(args.base, args.current)
-        elif args.command == "files":
-            resources = GitResources(args.repo)
-            output = await resources.get_changed_files(args.base, args.current)
+            output = tools.analyze_git_commits(args.base, args.current, args.repo)
         else:
             print(f"Unknown command: {args.command}", file=sys.stderr)
             sys.exit(1)
@@ -140,4 +125,4 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

@@ -2,9 +2,9 @@
 
 import re
 import time
-import asyncio
 import logging
 import subprocess
+import os
 from typing import Dict, List, Optional, Set, Iterator, Tuple
 from dataclasses import dataclass
 
@@ -162,29 +162,40 @@ class GitLogAnalyzer:
 
     def _build_git_command(self, subcommand: List[str]) -> List[str]:
         """Build a git command with the repository path."""
-        return ["git", "--no-pager", "-C", self.repo_path] + subcommand[
-            2:
-        ]  # Skip "git" and "--no-pager"
+        # If the command already starts with "git", extract the subcommand
+        if subcommand[0] == "git":
+            # Skip "git" and "--no-pager" if present
+            start_index = (
+                2 if len(subcommand) > 1 and subcommand[1] == "--no-pager" else 1
+            )
+            actual_subcommand = subcommand[start_index:]
+        else:
+            actual_subcommand = subcommand
 
-    async def _execute_git_command(
-        self, cmd: List[str], timeout: int = 10
+        return ["git", "--no-pager", "-C", self.repo_path] + actual_subcommand
+
+    def _execute_git_command(
+        self, cmd: List[str], timeout: int = 30
     ) -> subprocess.CompletedProcess:
-        """Execute a git command asynchronously."""
+        """Execute a git command synchronously."""
         cmd_with_path = self._build_git_command(cmd)
         logger.debug(f"Executing git command: {' '.join(cmd_with_path)}")
 
         try:
-            loop = asyncio.get_running_loop()
-            return await loop.run_in_executor(
-                None,
-                lambda: subprocess.run(
-                    cmd_with_path,
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                    timeout=timeout,
-                ),
+            logger.debug(f"Starting git command execution with timeout: {timeout}s")
+            result = subprocess.run(
+                cmd_with_path,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=timeout,
+                # Prevent hanging on user input prompts
+                input=None,
+                # Set environment to prevent interactive prompts
+                env={**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": ""},
             )
+            logger.debug(f"Git command completed with return code: {result.returncode}")
+            return result
         except subprocess.TimeoutExpired as e:
             logger.error(f"Git command timed out: {' '.join(cmd_with_path)}")
             raise e
@@ -192,7 +203,7 @@ class GitLogAnalyzer:
             logger.error(f"Git command failed: {' '.join(cmd_with_path)} - {e}")
             raise e
 
-    async def _validate_repo_path(self) -> None:
+    def _validate_repo_path(self) -> None:
         """Validate that the repository path exists and is a valid git repository."""
         import os
 
@@ -201,19 +212,54 @@ class GitLogAnalyzer:
         if not os.path.exists(self.repo_path):
             raise ValueError(f"Repository path does not exist: {self.repo_path}")
 
+        # Check if it's a directory
+        if not os.path.isdir(self.repo_path):
+            raise ValueError(f"Repository path is not a directory: {self.repo_path}")
+
+        # Check if .git directory exists
+        git_dir = os.path.join(self.repo_path, ".git")
+        if not os.path.exists(git_dir):
+            raise ValueError(f"No .git directory found in: {self.repo_path}")
+
+        logger.debug(f"Found .git directory at: {git_dir}")
+
+        # First, test if git is available
+        try:
+            test_result = self._execute_git_command(["git", "--version"])
+            if test_result.returncode != 0:
+                raise ValueError("Git command failed to execute")
+            logger.debug(f"Git version: {test_result.stdout.strip()}")
+        except Exception as e:
+            logger.error(f"Git availability test failed: {e}")
+            raise ValueError(f"Git is not available or not working: {e}")
+
         try:
             # Validate git repository
-            result1 = await self._execute_git_command(
+            result1 = self._execute_git_command(
                 ["git", "--no-pager", "rev-parse", "--git-dir"]
             )
             if result1.returncode != 0:
+                logger.error(
+                    f"Git rev-parse --git-dir failed with return code {result1.returncode}"
+                )
+                logger.error(f"stderr: {result1.stderr}")
                 raise ValueError(f"Not a valid git repository: {self.repo_path}")
 
-            result2 = await self._execute_git_command(
+            logger.debug(f"Git rev-parse --git-dir output: {result1.stdout.strip()}")
+
+            result2 = self._execute_git_command(
                 ["git", "--no-pager", "rev-parse", "--show-toplevel"]
             )
             if result2.returncode != 0:
+                logger.error(
+                    f"Git rev-parse --show-toplevel failed with return code {result2.returncode}"
+                )
+                logger.error(f"stderr: {result2.stderr}")
                 raise ValueError(f"Invalid git repository state: {self.repo_path}")
+
+            logger.debug(
+                f"Git rev-parse --show-toplevel output: {result2.stdout.strip()}"
+            )
 
         except subprocess.TimeoutExpired:
             raise ValueError(f"Git repository validation timed out: {self.repo_path}")
@@ -228,7 +274,7 @@ class GitLogAnalyzer:
         """Check if a line is a valid git commit hash."""
         return bool(self._commit_hash_pattern.match(line))
 
-    async def _validate_branches(self, base_branch: str, current_branch: str) -> None:
+    def _validate_branches(self, base_branch: str, current_branch: str) -> None:
         """Validate that the specified branches exist in the repository."""
         # Skip validation for commit hashes
         if self._is_commit_hash(base_branch) or self._is_commit_hash(current_branch):
@@ -239,7 +285,7 @@ class GitLogAnalyzer:
 
         try:
             cmd = ["git", "--no-pager", "branch", "-a", "--format=%(refname:short)"]
-            result = await self._execute_git_command(cmd)
+            result = self._execute_git_command(cmd)
 
             if result.returncode != 0:
                 raise Exception(
@@ -275,18 +321,18 @@ class GitLogAnalyzer:
         except Exception as e:
             raise Exception(f"Error validating branches: {e}")
 
-    async def get_git_log(
+    def get_git_log(
         self, base_branch: str = "master", current_branch: str = "HEAD"
     ) -> List[CommitInfo]:
-        """Retrieve git log between two branches asynchronously."""
+        """Retrieve git log between two branches synchronously."""
         start_time = time.time()
         logger.debug(f"Starting git log retrieval: {base_branch}..{current_branch}")
 
         try:
             # Validate repository and branches
             if not self._is_testing():
-                await self._validate_repo_path()
-            await self._validate_branches(base_branch, current_branch)
+                self._validate_repo_path()
+            self._validate_branches(base_branch, current_branch)
 
             # Execute git log command
             cmd = [
@@ -299,7 +345,7 @@ class GitLogAnalyzer:
                 "--date=short",
             ]
 
-            result = await self._execute_git_command(cmd, timeout=30)
+            result = self._execute_git_command(cmd, timeout=30)
 
             if result.returncode != 0:
                 if result.returncode == 128:

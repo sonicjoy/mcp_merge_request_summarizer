@@ -9,13 +9,11 @@ __email__ = "joe.luo@hotmail.com"
 
 from .analyzer import GitLogAnalyzer
 from .models import CommitInfo, MergeRequestSummary
-from .resources import GitResources
 from .tools import GitTools
 
 __all__ = [
     "GitLogAnalyzer",
     "CommitInfo",
     "MergeRequestSummary",
-    "GitResources",
     "GitTools",
 ]
