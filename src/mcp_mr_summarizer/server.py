@@ -84,27 +84,25 @@ async def get_working_directory() -> str:
 async def generate_merge_request_summary(
     base_branch: str = "master",
     current_branch: str = "HEAD",
-    repo_path: str = ".",
     format: str = "markdown",
 ) -> str:
     """Generate a comprehensive merge request summary from git logs"""
     start_time = time.time()
     logger.debug("Async tool called: generate_merge_request_summary")
     logger.debug(
-        f"Parameters: base_branch={base_branch}, current_branch={current_branch}, repo_path={repo_path}, format={format}"
+        f"Parameters: base_branch={base_branch}, current_branch={current_branch}, format={format}"
     )
 
     try:
-        # If repo_path is ".", use the agent's working directory if set
+        # Get the agent's working directory
         agent_dir = get_agent_working_dir()
-        if repo_path == "." and agent_dir is not None:
-            repo_path = agent_dir
-            logger.debug(
-                f"Using agent working directory for repo_path='.': {repo_path}"
-            )
+        if agent_dir is None:
+            return "Error: No working directory set. Use set_working_directory() to configure the agent's working directory."
+
+        logger.debug(f"Using agent working directory: {agent_dir}")
 
         result = await tools.generate_merge_request_summary(
-            base_branch, current_branch, repo_path, format
+            agent_dir, base_branch, current_branch, format
         )
         total_time = time.time() - start_time
         logger.info(
@@ -129,25 +127,24 @@ async def generate_merge_request_summary(
 
 @mcp.tool()
 async def analyze_git_commits(
-    base_branch: str = "master", current_branch: str = "HEAD", repo_path: str = "."
+    base_branch: str = "master", current_branch: str = "HEAD"
 ) -> str:
     """Analyze git commits and categorize them by type"""
     start_time = time.time()
     logger.debug("Async tool called: analyze_git_commits")
     logger.debug(
-        f"Parameters: base_branch={base_branch}, current_branch={current_branch}, repo_path={repo_path}"
+        f"Parameters: base_branch={base_branch}, current_branch={current_branch}"
     )
 
     try:
-        # If repo_path is ".", use the agent's working directory if set
+        # Get the agent's working directory
         agent_dir = get_agent_working_dir()
-        if repo_path == "." and agent_dir is not None:
-            repo_path = agent_dir
-            logger.debug(
-                f"Using agent working directory for repo_path='.': {repo_path}"
-            )
+        if agent_dir is None:
+            return "Error: No working directory set. Use set_working_directory() to configure the agent's working directory."
 
-        result = await tools.analyze_git_commits(base_branch, current_branch, repo_path)
+        logger.debug(f"Using agent working directory: {agent_dir}")
+
+        result = await tools.analyze_git_commits(agent_dir, base_branch, current_branch)
         total_time = time.time() - start_time
         logger.info(f"Async tool completed: analyze_git_commits in {total_time:.2f}s")
         return result

@@ -64,7 +64,7 @@ class TestGitTools:
             self.tools.analyzer.generate_summary = Mock(return_value=mock_summary)
 
             result = await self.tools.generate_merge_request_summary(
-                "main", "feature", "/test/repo", "markdown"
+                "/test/repo", "main", "feature", "markdown"
             )
 
         expected = "# Feature Enhancement\n\nAdded new feature with comprehensive tests and documentation."
@@ -109,7 +109,7 @@ class TestGitTools:
             self.tools.analyzer.generate_summary = Mock(return_value=mock_summary)
 
             result = await self.tools.generate_merge_request_summary(
-                "main", "feature", "/test/repo", "json"
+                "/test/repo", "main", "feature", "json"
             )
 
         # Parse the JSON result to verify structure
@@ -150,7 +150,7 @@ class TestGitTools:
                 mock_update.return_value = "# No Changes\n\nNo commits found."
 
                 result = await self.tools.generate_merge_request_summary(
-                    "main", "feature", custom_path, "markdown"
+                    custom_path, "main", "feature", "markdown"
                 )
 
                 # Verify that the update method was called
@@ -170,7 +170,9 @@ class TestGitTools:
                 GitAnalysisError,
                 match="Error during generate_merge_request_summary: Git error",
             ):
-                await self.tools.generate_merge_request_summary("main", "feature")
+                await self.tools.generate_merge_request_summary(
+                    "/test/repo", "main", "feature"
+                )
 
     @pytest.mark.asyncio
     async def test_analyze_git_commits_success(self):
@@ -213,7 +215,7 @@ class TestGitTools:
             )
 
             result = await self.tools.analyze_git_commits(
-                "main", "feature", "/test/repo"
+                "/test/repo", "main", "feature"
             )
 
         # todo: Verify the report structure
@@ -242,7 +244,7 @@ class TestGitTools:
             mock_get_git_log.return_value = []
 
             result = await self.tools.analyze_git_commits(
-                "main", "feature", "/test/repo"
+                "/test/repo", "main", "feature"
             )
             assert result == "No commits found between the specified branches."
 
@@ -265,7 +267,7 @@ class TestGitTools:
                 )
 
                 result = await self.tools.analyze_git_commits(
-                    "main", "feature", custom_path
+                    custom_path, "main", "feature"
                 )
 
                 # Verify that the update method was called
@@ -284,7 +286,7 @@ class TestGitTools:
             with pytest.raises(
                 GitAnalysisError, match="Error during analyze_git_commits: Git error"
             ):
-                await self.tools.analyze_git_commits("main", "feature", "/test/repo")
+                await self.tools.analyze_git_commits("/test/repo", "main", "feature")
 
     @pytest.mark.asyncio
     async def test_analyze_git_commits_commit_processing_exception(self):
@@ -322,7 +324,7 @@ class TestGitTools:
             )
 
             result = await self.tools.analyze_git_commits(
-                "main", "feature", "/test/repo"
+                "/test/repo", "main", "feature"
             )
 
         # Should still generate a report even with the error
@@ -420,7 +422,7 @@ class TestGitTools:
         # Call with same repo path
         self.tools.analyzer.get_git_log = AsyncMock(return_value=[])
         await self.tools.generate_merge_request_summary(
-            "main", "feature", "/test/repo", "markdown"
+            "/test/repo", "main", "feature", "markdown"
         )
 
         # Analyzer should be the same instance

@@ -14,7 +14,7 @@ async def test_async_debug_output():
     print("\n--- Testing async with non-existent repo ---")
     try:
         result = await tools.generate_merge_request_summary(
-            base_branch="master", current_branch="HEAD", repo_path="/non/existent/path"
+            "/non/existent/path", base_branch="master", current_branch="HEAD"
         )
         print(f"Async result (non-existent repo): {result}")
         assert False, "Expected exception to be raised"
@@ -29,6 +29,7 @@ async def test_async_debug_output():
     tools_current = GitTools(".")
     try:
         result = await tools_current.generate_merge_request_summary(
+            ".",
             base_branch="non-existent-branch-1",
             current_branch="non-existent-branch-2",
         )
