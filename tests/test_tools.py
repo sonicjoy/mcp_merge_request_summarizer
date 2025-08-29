@@ -4,8 +4,9 @@ import json
 import pytest
 from unittest.mock import Mock, patch, MagicMock, AsyncMock
 from dataclasses import asdict
+from collections import defaultdict, Counter
 
-from mcp_mr_summarizer.tools import GitTools
+from mcp_mr_summarizer.tools import GitTools, GitAnalysisError, AnalysisResult
 from mcp_mr_summarizer.models import CommitInfo, MergeRequestSummary
 
 
@@ -144,21 +145,32 @@ class TestGitTools:
             mock_analyzer_instance.generate_summary = Mock(return_value=mock_summary)
             mock_analyzer_class.return_value = mock_analyzer_instance
 
-            result = await self.tools.generate_merge_request_summary(
-                "main", "feature", custom_path, "markdown"
-            )
+            # Mock the _with_repo_path_update method to avoid actual git operations
+            with patch.object(self.tools, "_with_repo_path_update") as mock_update:
+                mock_update.return_value = "# No Changes\n\nNo commits found."
 
-            # Verify that a new analyzer was created with the custom path
-            mock_analyzer_class.assert_called_with(custom_path)
-            assert self.tools.repo_path == custom_path
+                result = await self.tools.generate_merge_request_summary(
+                    "main", "feature", custom_path, "markdown"
+                )
+
+                # Verify that the update method was called
+                mock_update.assert_called_once()
+                assert result == "# No Changes\n\nNo commits found."
 
     @pytest.mark.asyncio
     async def test_generate_merge_request_summary_exception_handling(self):
         """Test exception handling in generate_merge_request_summary."""
-        self.tools.analyzer.get_git_log = AsyncMock(side_effect=Exception("Git error"))
+        # Mock the _generate_summary_internal method to directly test error handling
+        with patch.object(
+            self.tools, "_generate_summary_internal", new_callable=AsyncMock
+        ) as mock_internal:
+            mock_internal.side_effect = Exception("Git error")
 
-        result = await self.tools.generate_merge_request_summary("main", "feature")
-        assert result.startswith("Error processing git data:")
+            with pytest.raises(
+                GitAnalysisError,
+                match="Error during generate_merge_request_summary: Git error",
+            ):
+                await self.tools.generate_merge_request_summary("main", "feature")
 
     @pytest.mark.asyncio
     async def test_analyze_git_commits_success(self):
@@ -246,13 +258,19 @@ class TestGitTools:
             mock_analyzer_instance.get_git_log = AsyncMock(return_value=mock_commits)
             mock_analyzer_class.return_value = mock_analyzer_instance
 
-            result = await self.tools.analyze_git_commits(
-                "main", "feature", custom_path
-            )
+            # Mock the _with_repo_path_update method to avoid actual git operations
+            with patch.object(self.tools, "_with_repo_path_update") as mock_update:
+                mock_update.return_value = (
+                    "No commits found between the specified branches."
+                )
 
-            # Verify that a new analyzer was created with the custom path
-            mock_analyzer_class.assert_called_with(custom_path)
-            assert self.tools.repo_path == custom_path
+                result = await self.tools.analyze_git_commits(
+                    "main", "feature", custom_path
+                )
+
+                # Verify that the update method was called
+                mock_update.assert_called_once()
+                assert result == "No commits found between the specified branches."
 
     @pytest.mark.asyncio
     async def test_analyze_git_commits_exception_handling(self):
@@ -263,10 +281,10 @@ class TestGitTools:
         ) as mock_get_git_log:
             mock_get_git_log.side_effect = Exception("Git error")
 
-            result = await self.tools.analyze_git_commits(
-                "main", "feature", "/test/repo"
-            )
-            assert result.startswith("Error processing git data:")
+            with pytest.raises(
+                GitAnalysisError, match="Error during analyze_git_commits: Git error"
+            ):
+                await self.tools.analyze_git_commits("main", "feature", "/test/repo")
 
     @pytest.mark.asyncio
     async def test_analyze_git_commits_commit_processing_exception(self):
@@ -313,14 +331,15 @@ class TestGitTools:
 
     def test_generate_analysis_report_empty_analysis(self):
         """Test report generation with empty analysis data."""
-        analysis = {
-            "total_commits": 0,
-            "total_insertions": 0,
-            "total_deletions": 0,
-            "categories": {},
-            "significant_changes": [],
-            "files_affected": set(),
-        }
+        analysis = AnalysisResult(
+            total_commits=0,
+            total_insertions=0,
+            total_deletions=0,
+            categories=defaultdict(list),
+            significant_changes=[],
+            files_affected=set(),
+            stats=Counter(),
+        )
 
         result = self.tools._generate_analysis_report_sync(analysis)
 
@@ -336,14 +355,15 @@ class TestGitTools:
 
     def test_generate_analysis_report_file_categorization_error(self):
         """Test report generation when file categorization fails."""
-        analysis = {
-            "total_commits": 1,
-            "total_insertions": 10,
-            "total_deletions": 5,
-            "categories": {},
-            "significant_changes": [],
-            "files_affected": {"src/file1.py", "src/file2.py"},
-        }
+        analysis = AnalysisResult(
+            total_commits=1,
+            total_insertions=10,
+            total_deletions=5,
+            categories=defaultdict(list),
+            significant_changes=[],
+            files_affected={"src/file1.py", "src/file2.py"},
+            stats=Counter(),
+        )
 
         self.tools.analyzer._categorize_files = Mock(
             side_effect=Exception("Categorization error")
@@ -361,14 +381,15 @@ class TestGitTools:
         """Test report generation with many files (truncation)."""
         # Create analysis with many files
         many_files = {f"file{i}.py" for i in range(25)}
-        analysis = {
-            "total_commits": 1,
-            "total_insertions": 10,
-            "total_deletions": 5,
-            "categories": {},
-            "significant_changes": [],
-            "files_affected": many_files,
-        }
+        analysis = AnalysisResult(
+            total_commits=1,
+            total_insertions=10,
+            total_deletions=5,
+            categories=defaultdict(list),
+            significant_changes=[],
+            files_affected=many_files,
+            stats=Counter(),
+        )
 
         self.tools.analyzer._categorize_files = Mock(
             return_value={

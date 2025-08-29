@@ -1,15 +1,12 @@
 """MCP Server for generating merge request summaries from git logs."""
 
 import time
-import sys
 import asyncio
 import logging
-import os
 from mcp.server.fastmcp import FastMCP
 
 from .analyzer import GitLogAnalyzer
-from .resources import GitResources
-from .tools import GitTools
+from .tools import GitTools, GitAnalysisError, GitTimeoutError, GitRepositoryError
 from .config import setup_logging
 
 # Setup logging
@@ -18,17 +15,10 @@ setup_logging()
 # Create logger for this module
 logger = logging.getLogger(__name__)
 
-# Get the directory of the current script to determine the repo root
-# This makes the server more robust when run from different working directories
-script_dir = os.path.dirname(os.path.abspath(__file__))
-repo_root = os.path.abspath(os.path.join(script_dir, "..", ".."))
-
 # Create an MCP server
 mcp = FastMCP("merge-request-summarizer")
 
-# Initialize resources and tools with default repo path
-# The actual repo path will be determined by the agent's repo_path parameter
-resources = GitResources()
+# Initialize tools with default repo path
 tools = GitTools()
 
 # Global variable to store the agent's working directory
@@ -50,37 +40,6 @@ def get_agent_working_dir():
     """Get the agent's working directory."""
     global _agent_working_dir
     return _agent_working_dir
-
-
-# Resources - Data retrieval without side effects
-@mcp.resource("git://repo/status")
-async def get_repo_status() -> str:
-    """Get current repository status and basic information."""
-    logger.debug("Resource called: get_repo_status")
-    return await resources.get_repo_status()
-
-
-@mcp.resource("git://commits/{base_branch}..{current_branch}")
-async def get_commit_history(base_branch: str, current_branch: str) -> str:
-    """Get commit history between two branches."""
-    logger.debug(
-        f"Resource called: get_commit_history({base_branch}, {current_branch})"
-    )
-    return await resources.get_commit_history(base_branch, current_branch)
-
-
-@mcp.resource("git://branches")
-async def get_branches() -> str:
-    """Get list of all branches in the repository."""
-    logger.debug("Resource called: get_branches")
-    return await resources.get_branches()
-
-
-@mcp.resource("git://files/changed/{base_branch}..{current_branch}")
-async def get_changed_files(base_branch: str, current_branch: str) -> str:
-    """Get list of files changed between two branches."""
-    logger.debug(f"Resource called: get_changed_files({base_branch}, {current_branch})")
-    return await resources.get_changed_files(base_branch, current_branch)
 
 
 # Tools - Actions that perform computation or analysis
@@ -114,11 +73,9 @@ async def set_working_directory(working_directory: str) -> str:
 async def get_working_directory() -> str:
     """Get the current working directory context."""
     global _agent_working_dir
-    import os
 
     if _agent_working_dir is None:
-        current_dir = os.getcwd()
-        return f"No agent working directory set. MCP server directory: {current_dir}"
+        return "No agent working directory set. Use set_working_directory() to configure the agent's working directory."
 
     return f"Agent working directory: {_agent_working_dir}"
 
@@ -154,11 +111,20 @@ async def generate_merge_request_summary(
             f"Async tool completed: generate_merge_request_summary in {total_time:.2f}s"
         )
         return result
+    except GitTimeoutError as e:
+        logger.error(f"Git timeout error in generate_merge_request_summary: {e}")
+        return f"Error: Git operation timed out. Please check if the repository is accessible and the branches exist."
+    except GitRepositoryError as e:
+        logger.error(f"Git repository error in generate_merge_request_summary: {e}")
+        return f"Error: Repository issue - {str(e)}"
+    except GitAnalysisError as e:
+        logger.error(f"Git analysis error in generate_merge_request_summary: {e}")
+        return f"Error: {str(e)}"
     except Exception as e:
         logger.error(
-            f"Async tool failed: generate_merge_request_summary - {e}", exc_info=True
+            f"Unexpected error in generate_merge_request_summary - {e}", exc_info=True
         )
-        return f"Error: {str(e)}"
+        return f"Error: Unexpected error occurred - {str(e)}"
 
 
 @mcp.tool()
@@ -185,9 +151,18 @@ async def analyze_git_commits(
         total_time = time.time() - start_time
         logger.info(f"Async tool completed: analyze_git_commits in {total_time:.2f}s")
         return result
-    except Exception as e:
-        logger.error(f"Async tool failed: analyze_git_commits - {e}", exc_info=True)
+    except GitTimeoutError as e:
+        logger.error(f"Git timeout error in analyze_git_commits: {e}")
+        return f"Error: Git operation timed out. Please check if the repository is accessible and the branches exist."
+    except GitRepositoryError as e:
+        logger.error(f"Git repository error in analyze_git_commits: {e}")
+        return f"Error: Repository issue - {str(e)}"
+    except GitAnalysisError as e:
+        logger.error(f"Git analysis error in analyze_git_commits: {e}")
         return f"Error: {str(e)}"
+    except Exception as e:
+        logger.error(f"Unexpected error in analyze_git_commits - {e}", exc_info=True)
+        return f"Error: Unexpected error occurred - {str(e)}"
 
 
 if __name__ == "__main__":
