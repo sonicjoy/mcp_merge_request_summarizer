@@ -2,14 +2,11 @@
 
 import re
 import time
-import sys
 import asyncio
 import logging
 import subprocess
-import functools
 from typing import Dict, List, Optional, Set, Iterator, Tuple
 from dataclasses import dataclass
-from itertools import islice, takewhile, dropwhile
 
 from .models import CommitInfo, MergeRequestSummary
 
@@ -64,6 +61,7 @@ class GitLogAnalyzer:
     async def _validate_repo_path(self) -> None:
         """Validate that the repository path exists and is a valid git repository."""
         import os
+
         logger.debug(f"Validating repo path: {self.repo_path}")
 
         if not os.path.exists(self.repo_path):
@@ -75,20 +73,32 @@ class GitLogAnalyzer:
             loop = asyncio.get_running_loop()
 
             def run_git_command(cmd):
-                logger.debug(f"Executing git command: {' '.join(cmd)} in {self.repo_path}")
-                return subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                    cwd=self.repo_path,
-                    timeout=30,
-                )
+                # Use -C flag instead of cwd parameter for better reliability
+                cmd_with_path = ["git", "--no-pager", "-C", self.repo_path] + cmd[
+                    2:
+                ]  # Skip "git" and "--no-pager"
+                logger.debug(f"Executing git command: {' '.join(cmd_with_path)}")
+                try:
+                    return subprocess.run(
+                        cmd_with_path,
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                        timeout=10,  # Reduced timeout for faster failure detection
+                    )
+                except subprocess.TimeoutExpired as e:
+                    logger.error(f"Git command timed out: {' '.join(cmd_with_path)}")
+                    raise e
+                except Exception as e:
+                    logger.error(f"Git command failed: {' '.join(cmd_with_path)} - {e}")
+                    raise e
 
             # First validation
             cmd1 = ["git", "--no-pager", "rev-parse", "--git-dir"]
             result1 = await loop.run_in_executor(None, run_git_command, cmd1)
-            logger.debug(f"Git command result: {result1.returncode}, {result1.stdout}, {result1.stderr}")
+            logger.debug(
+                f"Git command result: {result1.returncode}, {result1.stdout}, {result1.stderr}"
+            )
 
             if result1.returncode != 0:
                 raise ValueError(f"Not a valid git repository: {self.repo_path}")
@@ -96,7 +106,9 @@ class GitLogAnalyzer:
             # Second validation
             cmd2 = ["git", "--no-pager", "rev-parse", "--show-toplevel"]
             result2 = await loop.run_in_executor(None, run_git_command, cmd2)
-            logger.debug(f"Git command result: {result2.returncode}, {result2.stdout}, {result2.stderr}")
+            logger.debug(
+                f"Git command result: {result2.returncode}, {result2.stdout}, {result2.stderr}"
+            )
 
             if result2.returncode != 0:
                 raise ValueError(f"Invalid git repository state: {self.repo_path}")
@@ -105,7 +117,9 @@ class GitLogAnalyzer:
             logger.error(f"Git repository validation timed out: {self.repo_path}")
             raise ValueError(f"Git repository validation timed out: {self.repo_path}")
         except FileNotFoundError:
-            logger.error(f"Git command not found. Please ensure git is installed and in your PATH.")
+            logger.error(
+                f"Git command not found. Please ensure git is installed and in your PATH."
+            )
             raise ValueError(
                 "Git command not found. Please ensure git is installed and in your PATH."
             )
@@ -129,23 +143,40 @@ class GitLogAnalyzer:
             "-a",
             "--format=%(refname:short)",
         ]
-        logger.debug(f"Executing branch validation command: {' '.join(cmd)} in {self.repo_path}")
+        logger.debug(
+            f"Executing branch validation command: {' '.join(cmd)} (cwd: {self.repo_path})"
+        )
 
         try:
             loop = asyncio.get_running_loop()
-            result = await loop.run_in_executor(
-                None,
-                functools.partial(
-                    subprocess.run,
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                    cwd=self.repo_path,
-                    timeout=30,
-                ),
+
+            def run_branch_command(cmd):
+                # Use -C flag instead of cwd parameter for better reliability
+                cmd_with_path = ["git", "--no-pager", "-C", self.repo_path] + cmd[
+                    2:
+                ]  # Skip "git" and "--no-pager"
+                logger.debug(f"Executing branch command: {' '.join(cmd_with_path)}")
+                try:
+                    return subprocess.run(
+                        cmd_with_path,
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                        timeout=10,  # Reduced timeout for faster failure detection
+                    )
+                except subprocess.TimeoutExpired as e:
+                    logger.error(f"Branch command timed out: {' '.join(cmd_with_path)}")
+                    raise e
+                except Exception as e:
+                    logger.error(
+                        f"Branch command failed: {' '.join(cmd_with_path)} - {e}"
+                    )
+                    raise e
+
+            result = await loop.run_in_executor(None, run_branch_command, cmd)
+            logger.debug(
+                f"Git command result: {result.returncode}, {result.stdout[:100]}, {result.stderr}"
             )
-            logger.debug(f"Git command result: {result.returncode}, {result.stdout[:100]}, {result.stderr}")
 
             if result.returncode != 0:
                 stderr_output = result.stderr or "No stderr output"
@@ -224,21 +255,40 @@ class GitLogAnalyzer:
                 "--date=short",
             ]
 
-            logger.debug(f"Executing git command: {' '.join(cmd)} in {self.repo_path}")
-            loop = asyncio.get_running_loop()
-            result = await loop.run_in_executor(
-                None,
-                functools.partial(
-                    subprocess.run,
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                    cwd=self.repo_path,
-                    timeout=60,
-                ),
+            logger.debug(
+                f"Executing git command: {' '.join(cmd)} (cwd: {self.repo_path})"
             )
-            logger.debug(f"Git command result: {result.returncode}, {result.stdout[:100]}, {result.stderr}")
+            loop = asyncio.get_running_loop()
+
+            def run_git_log_command(cmd):
+                # Use -C flag instead of cwd parameter for better reliability
+                cmd_with_path = ["git", "--no-pager", "-C", self.repo_path] + cmd[
+                    2:
+                ]  # Skip "git" and "--no-pager"
+                logger.debug(f"Executing git log command: {' '.join(cmd_with_path)}")
+                try:
+                    return subprocess.run(
+                        cmd_with_path,
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                        timeout=30,  # Reduced timeout for faster failure detection
+                    )
+                except subprocess.TimeoutExpired as e:
+                    logger.error(
+                        f"Git log command timed out: {' '.join(cmd_with_path)}"
+                    )
+                    raise e
+                except Exception as e:
+                    logger.error(
+                        f"Git log command failed: {' '.join(cmd_with_path)} - {e}"
+                    )
+                    raise e
+
+            result = await loop.run_in_executor(None, run_git_log_command, cmd)
+            logger.debug(
+                f"Git command result: {result.returncode}, {result.stdout[:100]}, {result.stderr}"
+            )
 
             if result.returncode != 0:
                 if result.returncode == 128:

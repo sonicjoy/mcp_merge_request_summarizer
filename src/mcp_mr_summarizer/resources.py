@@ -31,11 +31,12 @@ class GitResources:
                 result = await asyncio.create_subprocess_exec(
                     "git",
                     "--no-pager",
+                    "-C",
+                    self.repo_path,
                     "rev-parse",
                     "--git-dir",
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
-                    cwd=self.repo_path,
                 )
                 await result.wait()
                 if result.returncode != 0:
@@ -47,11 +48,12 @@ class GitResources:
             result = await asyncio.create_subprocess_exec(
                 "git",
                 "--no-pager",
+                "-C",
+                self.repo_path,
                 "branch",
                 "--show-current",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=self.repo_path,
             )
             stdout, stderr = await result.communicate()
             current_branch = stdout.decode().strip()
@@ -61,12 +63,13 @@ class GitResources:
                 result = await asyncio.create_subprocess_exec(
                     "git",
                     "--no-pager",
+                    "-C",
+                    self.repo_path,
                     "config",
                     "--get",
                     "remote.origin.url",
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
-                    cwd=self.repo_path,
                 )
                 stdout, stderr = await result.communicate()
                 remote_url = stdout.decode().strip()
@@ -77,11 +80,12 @@ class GitResources:
             result = await asyncio.create_subprocess_exec(
                 "git",
                 "--no-pager",
+                "-C",
+                self.repo_path,
                 "rev-parse",
                 "--show-toplevel",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=self.repo_path,
             )
             stdout, stderr = await result.communicate()
             repo_name = os.path.basename(stdout.decode().strip())
@@ -90,11 +94,12 @@ class GitResources:
             result = await asyncio.create_subprocess_exec(
                 "git",
                 "--no-pager",
+                "-C",
+                self.repo_path,
                 "status",
                 "--porcelain",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=self.repo_path,
             )
             stdout, stderr = await result.communicate()
             is_dirty = bool(stdout.decode().strip())
@@ -103,12 +108,13 @@ class GitResources:
             result = await asyncio.create_subprocess_exec(
                 "git",
                 "--no-pager",
+                "-C",
+                self.repo_path,
                 "ls-files",
                 "--others",
                 "--exclude-standard",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=self.repo_path,
             )
             stdout, stderr = await result.communicate()
             untracked_files = (
@@ -121,12 +127,13 @@ class GitResources:
             result = await asyncio.create_subprocess_exec(
                 "git",
                 "--no-pager",
+                "-C",
+                self.repo_path,
                 "diff",
                 "--cached",
                 "--name-only",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=self.repo_path,
             )
             stdout, stderr = await result.communicate()
             staged_changes = (
@@ -139,11 +146,12 @@ class GitResources:
             result = await asyncio.create_subprocess_exec(
                 "git",
                 "--no-pager",
+                "-C",
+                self.repo_path,
                 "diff",
                 "--name-only",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=self.repo_path,
             )
             stdout, stderr = await result.communicate()
             unstaged_changes = (
@@ -200,11 +208,12 @@ class GitResources:
                 result = await asyncio.create_subprocess_exec(
                     "git",
                     "--no-pager",
+                    "-C",
+                    self.repo_path,
                     "rev-parse",
                     "--git-dir",
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
-                    cwd=self.repo_path,
                 )
                 await result.wait()
                 if result.returncode != 0:
@@ -216,11 +225,12 @@ class GitResources:
             result = await asyncio.create_subprocess_exec(
                 "git",
                 "--no-pager",
+                "-C",
+                self.repo_path,
                 "branch",
                 "--show-current",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=self.repo_path,
             )
             stdout, stderr = await result.communicate()
             current_branch = stdout.decode().strip()
@@ -229,11 +239,12 @@ class GitResources:
             result = await asyncio.create_subprocess_exec(
                 "git",
                 "--no-pager",
+                "-C",
+                self.repo_path,
                 "branch",
                 "--format=%(refname:short)",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=self.repo_path,
             )
             stdout, stderr = await result.communicate()
             local_branches = [
@@ -246,12 +257,13 @@ class GitResources:
             result = await asyncio.create_subprocess_exec(
                 "git",
                 "--no-pager",
+                "-C",
+                self.repo_path,
                 "branch",
                 "-r",
                 "--format=%(refname:short)",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=self.repo_path,
             )
             stdout, stderr = await result.communicate()
             remote_branches = [

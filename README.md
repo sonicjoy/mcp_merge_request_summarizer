@@ -83,9 +83,17 @@ python -m mcp_mr_summarizer.cli --help
    }
    ```
 
-2. **Use the tools and resources** through your MCP client interface:
+2. **Set up working directory context** (recommended):
+   ```python
+   # Set your working directory so repo_path="." works correctly
+   await set_working_directory("/path/to/your/git/repo")
+   ```
+
+3. **Use the tools and resources** through your MCP client interface:
 
 ### Tools (Actions)
+- `set_working_directory`: Set the agent's working directory context
+- `get_working_directory`: Get the current working directory context
 - `generate_merge_request_summary`: Creates full MR summaries
 - `analyze_git_commits`: Provides detailed commit analysis
 

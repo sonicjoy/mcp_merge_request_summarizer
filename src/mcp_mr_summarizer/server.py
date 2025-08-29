@@ -26,9 +26,13 @@ repo_root = os.path.abspath(os.path.join(script_dir, "..", ".."))
 # Create an MCP server
 mcp = FastMCP("merge-request-summarizer")
 
-# Initialize resources and tools (these don't require git validation on import)
-resources = GitResources(repo_path=repo_root)
-tools = GitTools(repo_path=repo_root)
+# Initialize resources and tools with default repo path
+# The actual repo path will be determined by the agent's repo_path parameter
+resources = GitResources()
+tools = GitTools()
+
+# Global variable to store the agent's working directory
+_agent_working_dir = None
 
 # Initialize analyzer lazily to avoid validation errors on import
 _analyzer = None
@@ -38,8 +42,14 @@ def get_analyzer():
     """Get or create the analyzer instance."""
     global _analyzer
     if _analyzer is None:
-        _analyzer = GitLogAnalyzer(repo_path=repo_root)
+        _analyzer = GitLogAnalyzer()
     return _analyzer
+
+
+def get_agent_working_dir():
+    """Get the agent's working directory."""
+    global _agent_working_dir
+    return _agent_working_dir
 
 
 # Resources - Data retrieval without side effects
@@ -75,6 +85,45 @@ async def get_changed_files(base_branch: str, current_branch: str) -> str:
 
 # Tools - Actions that perform computation or analysis
 @mcp.tool()
+async def set_working_directory(working_directory: str) -> str:
+    """Set the working directory context for the MCP server.
+
+    This allows the client agent to communicate its working directory
+    so that when repo_path='.' is used, it refers to the agent's directory
+    rather than the MCP server's directory.
+    """
+    global _agent_working_dir
+    import os
+
+    # Validate the directory exists
+    if not os.path.exists(working_directory):
+        return f"Error: Directory does not exist: {working_directory}"
+
+    if not os.path.isdir(working_directory):
+        return f"Error: Path is not a directory: {working_directory}"
+
+    # Convert to absolute path
+    abs_path = os.path.abspath(working_directory)
+    _agent_working_dir = abs_path
+
+    logger.info(f"Agent working directory set to: {abs_path}")
+    return f"Working directory set to: {abs_path}"
+
+
+@mcp.tool()
+async def get_working_directory() -> str:
+    """Get the current working directory context."""
+    global _agent_working_dir
+    import os
+
+    if _agent_working_dir is None:
+        current_dir = os.getcwd()
+        return f"No agent working directory set. MCP server directory: {current_dir}"
+
+    return f"Agent working directory: {_agent_working_dir}"
+
+
+@mcp.tool()
 async def generate_merge_request_summary(
     base_branch: str = "master",
     current_branch: str = "HEAD",
@@ -89,6 +138,14 @@ async def generate_merge_request_summary(
     )
 
     try:
+        # If repo_path is ".", use the agent's working directory if set
+        agent_dir = get_agent_working_dir()
+        if repo_path == "." and agent_dir is not None:
+            repo_path = agent_dir
+            logger.debug(
+                f"Using agent working directory for repo_path='.': {repo_path}"
+            )
+
         result = await tools.generate_merge_request_summary(
             base_branch, current_branch, repo_path, format
         )
@@ -116,6 +173,14 @@ async def analyze_git_commits(
     )
 
     try:
+        # If repo_path is ".", use the agent's working directory if set
+        agent_dir = get_agent_working_dir()
+        if repo_path == "." and agent_dir is not None:
+            repo_path = agent_dir
+            logger.debug(
+                f"Using agent working directory for repo_path='.': {repo_path}"
+            )
+
         result = await tools.analyze_git_commits(base_branch, current_branch, repo_path)
         total_time = time.time() - start_time
         logger.info(f"Async tool completed: analyze_git_commits in {total_time:.2f}s")

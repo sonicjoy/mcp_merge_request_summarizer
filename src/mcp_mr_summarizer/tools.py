@@ -46,7 +46,7 @@ class GitTools:
 
         try:
             # Update analyzer repo path if specified
-            if repo_path != "." and repo_path != self.repo_path:
+            if repo_path != self.repo_path:
                 logger.debug(
                     f"Updating analyzer repo_path from {self.repo_path} to {repo_path}"
                 )
@@ -112,7 +112,7 @@ class GitTools:
 
         try:
             # Update analyzer repo path if specified
-            if repo_path != "." and repo_path != self.repo_path:
+            if repo_path != self.repo_path:
                 logger.debug(
                     f"Updating analyzer repo_path from {self.repo_path} to {repo_path}"
                 )
