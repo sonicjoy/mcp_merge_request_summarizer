@@ -15,6 +15,8 @@ class TestGitTools:
     def setup_method(self):
         """Set up test fixtures."""
         self.tools = GitTools("/test/repo")
+        # Ensure analyzer is created and accessible
+        _ = self.tools.analyzer
 
     def test_init(self):
         """Test GitTools initialization."""
@@ -53,12 +55,16 @@ class TestGitTools:
             estimated_review_time="15 minutes",
         )
 
-        self.tools.analyzer.get_git_log = AsyncMock(return_value=mock_commits)
-        self.tools.analyzer.generate_summary = Mock(return_value=mock_summary)
+        # Mock the entire get_git_log method to bypass validation
+        with patch.object(
+            self.tools.analyzer, "get_git_log", new_callable=AsyncMock
+        ) as mock_get_git_log:
+            mock_get_git_log.return_value = mock_commits
+            self.tools.analyzer.generate_summary = Mock(return_value=mock_summary)
 
-        result = await self.tools.generate_merge_request_summary(
-            "main", "feature", ".", "markdown"
-        )
+            result = await self.tools.generate_merge_request_summary(
+                "main", "feature", "/test/repo", "markdown"
+            )
 
         expected = "# Feature Enhancement\n\nAdded new feature with comprehensive tests and documentation."
         assert result == expected
@@ -94,12 +100,16 @@ class TestGitTools:
             estimated_review_time="15 minutes",
         )
 
-        self.tools.analyzer.get_git_log = AsyncMock(return_value=mock_commits)
-        self.tools.analyzer.generate_summary = Mock(return_value=mock_summary)
+        # Mock the entire get_git_log method to bypass validation
+        with patch.object(
+            self.tools.analyzer, "get_git_log", new_callable=AsyncMock
+        ) as mock_get_git_log:
+            mock_get_git_log.return_value = mock_commits
+            self.tools.analyzer.generate_summary = Mock(return_value=mock_summary)
 
-        result = await self.tools.generate_merge_request_summary(
-            "main", "feature", ".", "json"
-        )
+            result = await self.tools.generate_merge_request_summary(
+                "main", "feature", "/test/repo", "json"
+            )
 
         # Parse the JSON result to verify structure
         parsed_result = json.loads(result)
@@ -131,9 +141,7 @@ class TestGitTools:
         with patch("mcp_mr_summarizer.tools.GitLogAnalyzer") as mock_analyzer_class:
             mock_analyzer_instance = Mock()
             mock_analyzer_instance.get_git_log = AsyncMock(return_value=mock_commits)
-            mock_analyzer_instance.generate_summary = Mock(
-                return_value=mock_summary
-            )
+            mock_analyzer_instance.generate_summary = Mock(return_value=mock_summary)
             mock_analyzer_class.return_value = mock_analyzer_instance
 
             result = await self.tools.generate_merge_request_summary(
@@ -177,18 +185,24 @@ class TestGitTools:
             ),
         ]
 
-        self.tools.analyzer.get_git_log = AsyncMock(return_value=mock_commits)
-        self.tools.analyzer.categorize_commit = Mock(
-            side_effect=[["bug_fix"], ["new_feature"]]
-        )
-        self.tools.analyzer._categorize_files = Mock(
-            return_value={
-                "Source": ["src/auth.py", "src/users.py", "src/models.py"],
-                "Tests": ["tests/test_auth.py"],
-            }
-        )
+        # Mock the entire get_git_log method to bypass validation
+        with patch.object(
+            self.tools.analyzer, "get_git_log", new_callable=AsyncMock
+        ) as mock_get_git_log:
+            mock_get_git_log.return_value = mock_commits
+            self.tools.analyzer.categorize_commit = Mock(
+                side_effect=[["bug_fix"], ["new_feature"]]
+            )
+            self.tools.analyzer._categorize_files = Mock(
+                return_value={
+                    "Source": ["src/auth.py", "src/users.py", "src/models.py"],
+                    "Tests": ["tests/test_auth.py"],
+                }
+            )
 
-        result = await self.tools.analyze_git_commits("main", "feature")
+            result = await self.tools.analyze_git_commits(
+                "main", "feature", "/test/repo"
+            )
 
         # todo: Verify the report structure
         assert "# Git Commit Analysis" in result
@@ -209,10 +223,16 @@ class TestGitTools:
     @pytest.mark.asyncio
     async def test_analyze_git_commits_no_commits(self):
         """Test git commits analysis when no commits are found."""
-        self.tools.analyzer.get_git_log = AsyncMock(return_value=[])
+        # Mock the entire get_git_log method to bypass validation
+        with patch.object(
+            self.tools.analyzer, "get_git_log", new_callable=AsyncMock
+        ) as mock_get_git_log:
+            mock_get_git_log.return_value = []
 
-        result = await self.tools.analyze_git_commits("main", "feature")
-        assert result == "No commits found between the specified branches."
+            result = await self.tools.analyze_git_commits(
+                "main", "feature", "/test/repo"
+            )
+            assert result == "No commits found between the specified branches."
 
     @pytest.mark.asyncio
     async def test_analyze_git_commits_with_custom_repo_path(self):
@@ -237,10 +257,16 @@ class TestGitTools:
     @pytest.mark.asyncio
     async def test_analyze_git_commits_exception_handling(self):
         """Test exception handling in analyze_git_commits."""
-        self.tools.analyzer.get_git_log = AsyncMock(side_effect=Exception("Git error"))
+        # Mock the entire get_git_log method to bypass validation
+        with patch.object(
+            self.tools.analyzer, "get_git_log", new_callable=AsyncMock
+        ) as mock_get_git_log:
+            mock_get_git_log.side_effect = Exception("Git error")
 
-        result = await self.tools.analyze_git_commits("main", "feature")
-        assert result.startswith("Error processing git data:")
+            result = await self.tools.analyze_git_commits(
+                "main", "feature", "/test/repo"
+            )
+            assert result.startswith("Error processing git data:")
 
     @pytest.mark.asyncio
     async def test_analyze_git_commits_commit_processing_exception(self):
@@ -267,13 +293,19 @@ class TestGitTools:
             ),
         ]
 
-        self.tools.analyzer.get_git_log = AsyncMock(return_value=mock_commits)
-        # Mock categorize_commit to raise an exception for the second commit
-        self.tools.analyzer.categorize_commit = Mock(
-            side_effect=[["feature"], Exception("Categorization error")]
-        )
+        # Mock the entire get_git_log method to bypass validation
+        with patch.object(
+            self.tools.analyzer, "get_git_log", new_callable=AsyncMock
+        ) as mock_get_git_log:
+            mock_get_git_log.return_value = mock_commits
+            # Mock categorize_commit to raise an exception for the second commit
+            self.tools.analyzer.categorize_commit = Mock(
+                side_effect=[["feature"], Exception("Categorization error")]
+            )
 
-        result = await self.tools.analyze_git_commits("main", "feature")
+            result = await self.tools.analyze_git_commits(
+                "main", "feature", "/test/repo"
+            )
 
         # Should still generate a report even with the error
         assert "# Git Commit Analysis" in result

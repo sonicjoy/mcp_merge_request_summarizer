@@ -20,9 +20,111 @@ class TimeoutError(Exception):
     pass
 
 
-def timeout_handler(signum, frame):
-    """Signal handler for timeout."""
-    raise TimeoutError("Operation timed out")
+# Constants for better maintainability
+class GitPatterns:
+    """Regex patterns for git output parsing."""
+
+    INSERTION_DELETION_PATTERNS = [
+        r"(\d+)\s+insertions?\(\+\),\s*(\d+)\s+deletions?\(-\)",  # "13 insertions(+), 25 deletions(-)"
+        r"(\d+)\s+insertions?,\s*(\d+)\s+deletions?",  # "13 insertions, 25 deletions"
+        r"(\d+)\s+insertions?\(\+\)",  # "13 insertions(+)" (insertions only)
+        r"(\d+)\s+deletions?\(-\)",  # "25 deletions(-)" (deletions only)
+    ]
+    COMMIT_HASH_PATTERN = r"^[0-9a-f]{40}$"
+
+
+class CategoryPatterns:
+    """Patterns for commit categorization."""
+
+    PATTERNS = {
+        "refactoring": {
+            "refactor",
+            "refactoring",
+            "cleanup",
+            "clean up",
+            "restructure",
+        },
+        "bug_fix": {"fix", "bug", "issue", "error", "resolve", "patch", "hotfix"},
+        "new_feature": {
+            "add",
+            "new",
+            "feature",
+            "implement",
+            "create",
+            "introduce",
+            "feat",
+        },
+        "cleanup": {"remove", "delete", "drop", "deprecate", "clean"},
+        "update": {"update", "upgrade", "bump", "dependenc", "version"},
+        "test": {"test", "spec", "specs", "testing", "unit", "integration"},
+        "documentation": {"docs", "documentation", "readme", "comment", "doc"},
+    }
+
+
+class FilePatterns:
+    """Patterns for file categorization."""
+
+    PATTERNS = {
+        "Services": {"patterns": ["service", "api", "client"], "extensions": set()},
+        "Models": {
+            "patterns": ["model", "entity", "dto", "schema"],
+            "extensions": set(),
+        },
+        "Controllers": {
+            "patterns": ["controller", "handler", "route"],
+            "extensions": set(),
+        },
+        "Tests": {
+            "patterns": ["test", "spec", "specs", "testing"],
+            "extensions": set(),
+        },
+        "Configuration": {
+            "patterns": [],
+            "extensions": {
+                ".json",
+                ".config",
+                ".yml",
+                ".yaml",
+                ".xml",
+                ".toml",
+                ".ini",
+            },
+        },
+        "Documentation": {
+            "patterns": [],
+            "extensions": {".md", ".txt", ".rst", ".adoc"},
+        },
+        "Frontend": {
+            "patterns": [],
+            "extensions": {
+                ".js",
+                ".jsx",
+                ".ts",
+                ".tsx",
+                ".vue",
+                ".svelte",
+                ".html",
+                ".css",
+                ".scss",
+                ".sass",
+            },
+        },
+        "Backend": {
+            "patterns": [],
+            "extensions": {
+                ".py",
+                ".java",
+                ".cs",
+                ".go",
+                ".rs",
+                ".php",
+                ".rb",
+                ".js",
+                ".ts",
+            },
+        },
+        "Other": {"patterns": [], "extensions": set()},
+    }
 
 
 @dataclass
@@ -42,11 +144,11 @@ class GitLogAnalyzer:
     def __init__(self, repo_path: str = ".") -> None:
         """Initialize the analyzer with a repository path."""
         self.repo_path = repo_path
-        # Only validate in production, not during testing
-        if not self._is_testing():
-            # Note: _validate_repo_path is now async but we can't await in __init__
-            # Validation will be done when needed in async methods
-            pass
+        # Pre-compile regex patterns for better performance
+        self._compiled_patterns = [
+            re.compile(pattern) for pattern in GitPatterns.INSERTION_DELETION_PATTERNS
+        ]
+        self._commit_hash_pattern = re.compile(GitPatterns.COMMIT_HASH_PATTERN)
 
     def _is_testing(self) -> bool:
         """Check if we're running in a test environment."""
@@ -58,6 +160,38 @@ class GitLogAnalyzer:
             or "PYTEST_CURRENT_TEST" in os.environ
         )
 
+    def _build_git_command(self, subcommand: List[str]) -> List[str]:
+        """Build a git command with the repository path."""
+        return ["git", "--no-pager", "-C", self.repo_path] + subcommand[
+            2:
+        ]  # Skip "git" and "--no-pager"
+
+    async def _execute_git_command(
+        self, cmd: List[str], timeout: int = 10
+    ) -> subprocess.CompletedProcess:
+        """Execute a git command asynchronously."""
+        cmd_with_path = self._build_git_command(cmd)
+        logger.debug(f"Executing git command: {' '.join(cmd_with_path)}")
+
+        try:
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(
+                None,
+                lambda: subprocess.run(
+                    cmd_with_path,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=timeout,
+                ),
+            )
+        except subprocess.TimeoutExpired as e:
+            logger.error(f"Git command timed out: {' '.join(cmd_with_path)}")
+            raise e
+        except Exception as e:
+            logger.error(f"Git command failed: {' '.join(cmd_with_path)} - {e}")
+            raise e
+
     async def _validate_repo_path(self) -> None:
         """Validate that the repository path exists and is a valid git repository."""
         import os
@@ -65,136 +199,57 @@ class GitLogAnalyzer:
         logger.debug(f"Validating repo path: {self.repo_path}")
 
         if not os.path.exists(self.repo_path):
-            logger.error(f"Repository path does not exist: {self.repo_path}")
             raise ValueError(f"Repository path does not exist: {self.repo_path}")
 
-        # Check if it's actually a git repository by running git command
         try:
-            loop = asyncio.get_running_loop()
-
-            def run_git_command(cmd):
-                # Use -C flag instead of cwd parameter for better reliability
-                cmd_with_path = ["git", "--no-pager", "-C", self.repo_path] + cmd[
-                    2:
-                ]  # Skip "git" and "--no-pager"
-                logger.debug(f"Executing git command: {' '.join(cmd_with_path)}")
-                try:
-                    return subprocess.run(
-                        cmd_with_path,
-                        capture_output=True,
-                        text=True,
-                        check=False,
-                        timeout=10,  # Reduced timeout for faster failure detection
-                    )
-                except subprocess.TimeoutExpired as e:
-                    logger.error(f"Git command timed out: {' '.join(cmd_with_path)}")
-                    raise e
-                except Exception as e:
-                    logger.error(f"Git command failed: {' '.join(cmd_with_path)} - {e}")
-                    raise e
-
-            # First validation
-            cmd1 = ["git", "--no-pager", "rev-parse", "--git-dir"]
-            result1 = await loop.run_in_executor(None, run_git_command, cmd1)
-            logger.debug(
-                f"Git command result: {result1.returncode}, {result1.stdout}, {result1.stderr}"
+            # Validate git repository
+            result1 = await self._execute_git_command(
+                ["git", "--no-pager", "rev-parse", "--git-dir"]
             )
-
             if result1.returncode != 0:
                 raise ValueError(f"Not a valid git repository: {self.repo_path}")
 
-            # Second validation
-            cmd2 = ["git", "--no-pager", "rev-parse", "--show-toplevel"]
-            result2 = await loop.run_in_executor(None, run_git_command, cmd2)
-            logger.debug(
-                f"Git command result: {result2.returncode}, {result2.stdout}, {result2.stderr}"
+            result2 = await self._execute_git_command(
+                ["git", "--no-pager", "rev-parse", "--show-toplevel"]
             )
-
             if result2.returncode != 0:
                 raise ValueError(f"Invalid git repository state: {self.repo_path}")
 
         except subprocess.TimeoutExpired:
-            logger.error(f"Git repository validation timed out: {self.repo_path}")
             raise ValueError(f"Git repository validation timed out: {self.repo_path}")
         except FileNotFoundError:
-            logger.error(
-                f"Git command not found. Please ensure git is installed and in your PATH."
-            )
             raise ValueError(
                 "Git command not found. Please ensure git is installed and in your PATH."
             )
         except Exception as e:
-            logger.error(f"Error validating git repository: {e}")
             raise ValueError(f"Error validating git repository: {e}")
+
+    def _is_commit_hash(self, line: str) -> bool:
+        """Check if a line is a valid git commit hash."""
+        return bool(self._commit_hash_pattern.match(line))
 
     async def _validate_branches(self, base_branch: str, current_branch: str) -> None:
         """Validate that the specified branches exist in the repository."""
-        # Skip validation for commit hashes (40-character hex strings)
+        # Skip validation for commit hashes
         if self._is_commit_hash(base_branch) or self._is_commit_hash(current_branch):
             logger.debug(
                 f"Skipping branch validation for commit hashes: {base_branch}, {current_branch}"
             )
             return
 
-        cmd = [
-            "git",
-            "--no-pager",
-            "branch",
-            "-a",
-            "--format=%(refname:short)",
-        ]
-        logger.debug(
-            f"Executing branch validation command: {' '.join(cmd)} (cwd: {self.repo_path})"
-        )
-
         try:
-            loop = asyncio.get_running_loop()
-
-            def run_branch_command(cmd):
-                # Use -C flag instead of cwd parameter for better reliability
-                cmd_with_path = ["git", "--no-pager", "-C", self.repo_path] + cmd[
-                    2:
-                ]  # Skip "git" and "--no-pager"
-                logger.debug(f"Executing branch command: {' '.join(cmd_with_path)}")
-                try:
-                    return subprocess.run(
-                        cmd_with_path,
-                        capture_output=True,
-                        text=True,
-                        check=False,
-                        timeout=10,  # Reduced timeout for faster failure detection
-                    )
-                except subprocess.TimeoutExpired as e:
-                    logger.error(f"Branch command timed out: {' '.join(cmd_with_path)}")
-                    raise e
-                except Exception as e:
-                    logger.error(
-                        f"Branch command failed: {' '.join(cmd_with_path)} - {e}"
-                    )
-                    raise e
-
-            result = await loop.run_in_executor(None, run_branch_command, cmd)
-            logger.debug(
-                f"Git command result: {result.returncode}, {result.stdout[:100]}, {result.stderr}"
-            )
+            cmd = ["git", "--no-pager", "branch", "-a", "--format=%(refname:short)"]
+            result = await self._execute_git_command(cmd)
 
             if result.returncode != 0:
-                stderr_output = result.stderr or "No stderr output"
-                logger.error(
-                    f"Branch validation command failed with return code {result.returncode}: {stderr_output}"
+                raise Exception(
+                    f"Failed to get branches: {result.stderr or 'No stderr output'}"
                 )
-                raise Exception(f"Failed to get branches: {stderr_output}")
 
             stdout_output = result.stdout.strip()
-            logger.debug(f"Branch validation output: {stdout_output}")
-
-            if not stdout_output:
-                logger.warning("No branches found in repository")
-                available_branches = set()
-            else:
-                available_branches = set(stdout_output.split("\n"))
-
-            logger.debug(f"Available branches: {available_branches}")
+            available_branches = (
+                set(stdout_output.split("\n")) if stdout_output else set()
+            )
 
             # Check if branches exist
             missing_branches = []
@@ -204,31 +259,20 @@ class GitLogAnalyzer:
                 missing_branches.append(current_branch)
 
             if missing_branches:
-                logger.error(f"Missing branches: {missing_branches}")
-                logger.error(f"Available branches: {sorted(list(available_branches))}")
                 raise ValueError(
-                    f"Branch(es) not found: {', '.join(missing_branches)}. Available branches: {', '.join(sorted(list(available_branches)))}"
+                    f"Branch(es) not found: {', '.join(missing_branches)}. "
+                    f"Available branches: {', '.join(sorted(list(available_branches)))}"
                 )
 
-            logger.debug(
-                f"Branch validation successful for {base_branch} and {current_branch}"
-            )
-
         except subprocess.TimeoutExpired:
-            logger.error("Branch validation timed out after 30 seconds")
             raise TimeoutError("Branch validation timed out")
         except FileNotFoundError:
-            logger.error("Git command not found")
             raise Exception(
                 "Git command not found. Please ensure git is installed and in your PATH."
             )
+        except (ValueError, TimeoutError):
+            raise
         except Exception as e:
-            if "Branch(es) not found" in str(e):
-                raise
-            # Re-raise TimeoutError directly
-            if isinstance(e, TimeoutError):
-                raise
-            logger.error(f"Unexpected error in branch validation: {e}")
             raise Exception(f"Error validating branches: {e}")
 
     async def get_git_log(
@@ -239,12 +283,12 @@ class GitLogAnalyzer:
         logger.debug(f"Starting git log retrieval: {base_branch}..{current_branch}")
 
         try:
-            # Validate repository path if not in testing
+            # Validate repository and branches
             if not self._is_testing():
                 await self._validate_repo_path()
-
             await self._validate_branches(base_branch, current_branch)
 
+            # Execute git log command
             cmd = [
                 "git",
                 "--no-pager",
@@ -255,40 +299,7 @@ class GitLogAnalyzer:
                 "--date=short",
             ]
 
-            logger.debug(
-                f"Executing git command: {' '.join(cmd)} (cwd: {self.repo_path})"
-            )
-            loop = asyncio.get_running_loop()
-
-            def run_git_log_command(cmd):
-                # Use -C flag instead of cwd parameter for better reliability
-                cmd_with_path = ["git", "--no-pager", "-C", self.repo_path] + cmd[
-                    2:
-                ]  # Skip "git" and "--no-pager"
-                logger.debug(f"Executing git log command: {' '.join(cmd_with_path)}")
-                try:
-                    return subprocess.run(
-                        cmd_with_path,
-                        capture_output=True,
-                        text=True,
-                        check=False,
-                        timeout=30,  # Reduced timeout for faster failure detection
-                    )
-                except subprocess.TimeoutExpired as e:
-                    logger.error(
-                        f"Git log command timed out: {' '.join(cmd_with_path)}"
-                    )
-                    raise e
-                except Exception as e:
-                    logger.error(
-                        f"Git log command failed: {' '.join(cmd_with_path)} - {e}"
-                    )
-                    raise e
-
-            result = await loop.run_in_executor(None, run_git_log_command, cmd)
-            logger.debug(
-                f"Git command result: {result.returncode}, {result.stdout[:100]}, {result.stderr}"
-            )
+            result = await self._execute_git_command(cmd, timeout=30)
 
             if result.returncode != 0:
                 if result.returncode == 128:
@@ -300,58 +311,48 @@ class GitLogAnalyzer:
                     )
 
             output = result.stdout
-            git_time = time.time() - start_time
-            logger.debug(f"Git command completed in {git_time:.2f}s")
-
             if not output:
                 logger.debug("No git output found, returning empty list")
                 return []
 
+            # Parse the output
             parse_start = time.time()
             commits = self._parse_git_output_sync_modern(output)
             parse_time = time.time() - parse_start
-            logger.debug(
-                f"Modern async parsing completed in {parse_time:.2f}s, found {len(commits)} commits"
-            )
 
             total_time = time.time() - start_time
-            logger.debug(f"Total git log retrieval time: {total_time:.2f}s")
+            logger.debug(
+                f"Git log retrieval completed in {total_time:.2f}s, found {len(commits)} commits"
+            )
+
             return commits
 
         except subprocess.TimeoutExpired:
-            logger.error("Async operation timed out")
-            raise TimeoutError("Git command timed out after 60 seconds")
+            raise TimeoutError("Git command timed out after 30 seconds")
         except Exception as e:
-            logger.error(f"Unexpected error in get_git_log: {e}")
             raise Exception(f"Unexpected error getting git log: {e}")
 
     def _parse_git_output_sync_modern(self, output: str) -> List[CommitInfo]:
         """Modern synchronous parsing of git output using iterators and generators."""
         lines = output.split("\n")
-        logger.debug(f"Modern parsing {len(lines)} lines of git output")
+        logger.debug(f"Parsing {len(lines)} lines of git output")
 
-        # Use iterator-based parsing for better performance
         commits = []
         line_iter = iter(lines)
 
         try:
             while True:
-                # Find next commit section
                 section = self._extract_commit_section(line_iter)
                 if not section:
                     break
 
-                # Parse the section into a CommitInfo object
                 commit_info = self._parse_commit_section(section)
                 if commit_info:
                     commits.append(commit_info)
-                    logger.debug(
-                        f"Modern parsed commit {commit_info.hash[:8]}: {len(commit_info.files_changed)} files, {commit_info.insertions}+/{commit_info.deletions}- lines"
-                    )
         except StopIteration:
-            pass  # End of lines reached
+            pass
 
-        logger.debug(f"Modern parsing found {len(commits)} commits")
+        logger.debug(f"Parsed {len(commits)} commits")
         return commits
 
     def _extract_commit_section(
@@ -385,16 +386,16 @@ class GitLogAnalyzer:
                 )
                 return None
 
-            # Skip empty lines after message
+            # Collect stats lines
             stats_lines = []
             try:
                 # Skip empty lines
                 while True:
                     line = next(line_iter).strip()
-                    if line:  # Found non-empty line
+                    if line:
                         break
 
-                # Collect stats lines until we hit another commit or empty line
+                # Collect stats lines until we hit another commit
                 while line and not self._is_commit_hash(line):
                     stats_lines.append(line)
                     try:
@@ -402,14 +403,12 @@ class GitLogAnalyzer:
                     except StopIteration:
                         break
 
-                # If we found another commit hash, we need to put it back
-                if line and self._is_commit_hash(line):
-                    # We can't easily put it back, so we'll handle this in the main loop
-                    pass
-
             except StopIteration:
-                pass  # End of lines reached
+                pass
 
+            logger.debug(
+                f"Collected stats lines for commit {commit_hash[:8]}: {stats_lines}"
+            )
             return GitLogSection(
                 hash=commit_hash,
                 author=author,
@@ -421,32 +420,33 @@ class GitLogAnalyzer:
         except StopIteration:
             return None
 
-    def _is_commit_hash(self, line: str) -> bool:
-        """Check if a line is a valid git commit hash."""
-        return len(line) == 40 and all(c in "0123456789abcdef" for c in line.lower())
-
     def _parse_commit_section(self, section: GitLogSection) -> Optional[CommitInfo]:
         """Parse a commit section into a CommitInfo object."""
         files_changed = []
         insertions = 0
         deletions = 0
 
-        # Parse stats lines using list comprehension and regex
+        logger.debug(
+            f"Parsing commit section with {len(section.stats_lines)} stats lines"
+        )
         for line in section.stats_lines:
+            logger.debug(f"Processing stats line: {line}")
             if "|" in line and any(c.isdigit() for c in line):
                 file_name, _ = self._parse_file_stats_line(line)
                 if file_name:
                     files_changed.append(file_name)
-
-                # Per-file stats parsing removed for simplicity and robustness.
-                # Totals are correctly gathered from the summary line below.
-
-            elif "files changed" in line:
+                    logger.debug(f"Added file: {file_name}")
+            elif "file changed" in line or "files changed" in line:
                 # This is the summary line with total stats
+                logger.debug(f"Parsing summary line: {line}")
                 ins, dels = self._extract_insertions_deletions(line)
-                insertions = ins  # Use the total from summary line
+                logger.debug(f"Extracted insertions: {ins}, deletions: {dels}")
+                insertions = ins
                 deletions = dels
 
+        logger.debug(
+            f"Final commit info: files={files_changed}, insertions={insertions}, deletions={deletions}"
+        )
         return CommitInfo(
             hash=section.hash,
             author=section.author,
@@ -459,309 +459,62 @@ class GitLogAnalyzer:
 
     def _parse_file_stats_line(self, line: str) -> Tuple[Optional[str], str]:
         """Parse a file stats line and return (filename, stats_part)."""
-        parts = line.split("|", 1)  # Split only on first |
+        parts = line.split("|", 1)
         if len(parts) < 2:
             return None, ""
 
         file_name = parts[0].strip()
         stats_part = parts[1].strip()
 
-        # Handle abbreviated file paths (like ".../Generic/IStatsPlayerFixtureStatsService.cs")
-        if file_name.startswith("..."):
-            # This is an abbreviated path, we need to get the full path
-            # For now, we'll include it as-is since we don't have the full path context
-            # The user can see the abbreviated path which is still useful
-            return file_name, stats_part
-
         return file_name, stats_part
 
     def _extract_insertions_deletions(self, stats_part: str) -> Tuple[int, int]:
         """Extract insertions and deletions from stats part."""
-        # Try multiple patterns to match different git stat formats
-        patterns = [
-            r"(\d+)\s+insertions?\(\+\),\s*(\d+)\s+deletions?\(-\)",  # "13 insertions(+), 25 deletions(-)"
-            r"(\d+)\s+insertions?,\s*(\d+)\s+deletions?",  # "13 insertions, 25 deletions"
-            r"(\d+)\s+insertions?\(\+\)",  # "13 insertions(+)" (insertions only)
-            r"(\d+)\s+deletions?\(-\)",  # "25 deletions(-)" (deletions only)
-        ]
-
         insertions = 0
         deletions = 0
 
-        for pattern in patterns:
-            stats_match = re.search(pattern, stats_part)
+        logger.debug(f"Extracting from stats part: {stats_part}")
+        for pattern in self._compiled_patterns:
+            stats_match = pattern.search(stats_part)
             if stats_match:
-                if "insertions" in pattern:
-                    insertions = int(stats_match.group(1))
-                if "deletions" in pattern:
-                    deletions = int(stats_match.group(1))
+                logger.debug(f"Pattern matched: {pattern.pattern}")
                 # If pattern has both groups, use them
-                if stats_match.groups() and len(stats_match.groups()) >= 2:
+                if len(stats_match.groups()) >= 2:
                     insertions = int(stats_match.group(1))
                     deletions = int(stats_match.group(2))
+                    logger.debug(f"Both groups: {insertions}, {deletions}")
+                else:
+                    # Single group pattern
+                    if "insertions" in pattern.pattern:
+                        insertions = int(stats_match.group(1))
+                        logger.debug(f"Insertions only: {insertions}")
+                    if "deletions" in pattern.pattern:
+                        deletions = int(stats_match.group(1))
+                        logger.debug(f"Deletions only: {deletions}")
 
+        logger.debug(f"Final result: {insertions}, {deletions}")
         return insertions, deletions
 
-    def _parse_git_output(self, output: str) -> List[CommitInfo]:
-        """Legacy synchronous parsing of git output (runs in thread pool)."""
-        commits = []
-        lines = output.split("\n")
-        logger.debug(f"Legacy parsing {len(lines)} lines of git output")
-
-        i = 0
-        max_iterations = len(lines) * 2  # Safety limit
-        iteration_count = 0
-        commits_found = 0
-
-        while i < len(lines) and iteration_count < max_iterations:
-            iteration_count += 1
-
-            # Look for commit hash (40 characters)
-            if len(lines[i]) == 40 and all(
-                c in "0123456789abcdef" for c in lines[i].lower()
-            ):
-                commit_hash = lines[i]
-                logger.debug(f"Found commit hash: {commit_hash[:8]}...")
-
-                # Get author, date, and message
-                if i + 3 < len(lines):
-                    author = lines[i + 1].strip()
-                    date = lines[i + 2].strip()
-                    message = lines[i + 3].strip()
-
-                    # Skip if any required field is empty
-                    if not all([author, date, message]):
-                        logger.debug(
-                            f"Skipping commit {commit_hash[:8]} - missing required fields"
-                        )
-                        i += 1
-                        continue
-
-                    # Find the stats section
-                    files_changed = []
-                    insertions = 0
-                    deletions = 0
-
-                    # Look for the stats section (starts after message and empty lines)
-                    j = i + 4
-                    while j < len(lines) and not lines[j].strip():
-                        j += 1
-
-                    # Parse stats section
-                    stats_lines = 0
-                    while j < len(lines) and lines[j].strip():
-                        line = lines[j].strip()
-                        stats_lines += 1
-
-                        # Check if this is a file change line (contains | and numbers)
-                        if "|" in line and any(c.isdigit() for c in line):
-                            parts = line.split("|")
-                            if len(parts) >= 2:
-                                file_name = parts[0].strip()
-                                if file_name:
-                                    # Include abbreviated paths (like ".../Generic/IStatsPlayerFixtureStatsService.cs")
-                                    files_changed.append(file_name)
-
-                                # Parse insertions/deletions from the stats part
-                                stats_part = parts[1].strip()
-                                # Try multiple patterns to match different git stat formats
-                                patterns = [
-                                    r"(\d+)\s+insertions?\(\+\),\s*(\d+)\s+deletions?\(-\)",  # "13 insertions(+), 25 deletions(-)"
-                                    r"(\d+)\s+insertions?,\s*(\d+)\s+deletions?",  # "13 insertions, 25 deletions"
-                                    r"(\d+)\s+insertions?\(\+\)",  # "13 insertions(+)" (insertions only)
-                                    r"(\d+)\s+deletions?\(-\)",  # "25 deletions(-)" (deletions only)
-                                ]
-
-                                for pattern in patterns:
-                                    stats_match = re.search(pattern, stats_part)
-                                    if stats_match:
-                                        if "insertions" in pattern:
-                                            insertions += int(stats_match.group(1))
-                                        if "deletions" in pattern:
-                                            deletions += int(stats_match.group(1))
-                                        # If pattern has both groups, use them
-                                        if (
-                                            stats_match.groups()
-                                            and len(stats_match.groups()) >= 2
-                                        ):
-                                            insertions += int(stats_match.group(1))
-                                            deletions += int(stats_match.group(2))
-                                        break
-                        elif "files changed" in line:
-                            # This is the summary line with total stats
-                            patterns = [
-                                r"(\d+)\s+insertions?\(\+\),\s*(\d+)\s+deletions?\(-\)",  # "13 insertions(+), 25 deletions(-)"
-                                r"(\d+)\s+insertions?,\s*(\d+)\s+deletions?",  # "13 insertions, 25 deletions"
-                                r"(\d+)\s+insertions?\(\+\)",  # "13 insertions(+)" (insertions only)
-                                r"(\d+)\s+deletions?\(-\)",  # "25 deletions(-)" (deletions only)
-                            ]
-
-                            for pattern in patterns:
-                                stats_match = re.search(pattern, line)
-                                if stats_match:
-                                    if "insertions" in pattern:
-                                        insertions = int(
-                                            stats_match.group(1)
-                                        )  # Use total from summary
-                                    if "deletions" in pattern:
-                                        deletions = int(
-                                            stats_match.group(1)
-                                        )  # Use total from summary
-                                    # If pattern has both groups, use them
-                                    if (
-                                        stats_match.groups()
-                                        and len(stats_match.groups()) >= 2
-                                    ):
-                                        insertions = int(stats_match.group(1))
-                                        deletions = int(stats_match.group(2))
-                                    break
-
-                        j += 1
-
-                    # Create commit info
-                    commit_info = CommitInfo(
-                        hash=commit_hash,
-                        author=author,
-                        date=date,
-                        message=message,
-                        files_changed=files_changed,
-                        insertions=insertions,
-                        deletions=deletions,
-                    )
-                    commits.append(commit_info)
-                    commits_found += 1
-
-                    logger.debug(
-                        f"Legacy parsed commit {commit_hash[:8]}: {len(files_changed)} files, {insertions}+/{deletions}- lines"
-                    )
-
-                    # Move to next commit - ensure we always advance
-                    i = max(j, i + 1)
-                else:
-                    logger.debug(
-                        f"Skipping commit {commit_hash[:8]} - insufficient lines"
-                    )
-                    i += 1
-            else:
-                i += 1
-
-        if iteration_count >= max_iterations:
-            logger.warning(
-                f"Legacy git log parsing reached maximum iterations ({max_iterations})"
-            )
-
-        return commits
-
     def categorize_commit(self, commit: CommitInfo) -> List[str]:
-        """Categorize a commit based on its message and changes using efficient techniques."""
-        # Pre-compile regex patterns for better performance
-        if not hasattr(self, "_category_patterns"):
-            self._category_patterns = {
-                "refactoring": {
-                    "refactor",
-                    "refactoring",
-                    "cleanup",
-                    "clean up",
-                    "restructure",
-                },
-                "bug_fix": {
-                    "fix",
-                    "bug",
-                    "issue",
-                    "error",
-                    "resolve",
-                    "patch",
-                    "hotfix",
-                },
-                "new_feature": {
-                    "add",
-                    "new",
-                    "feature",
-                    "implement",
-                    "create",
-                    "introduce",
-                    "feat",
-                },
-                "cleanup": {"remove", "delete", "drop", "deprecate", "clean"},
-                "update": {"update", "upgrade", "bump", "dependenc", "version"},
-                "test": {"test", "spec", "specs", "testing", "unit", "integration"},
-                "documentation": {"docs", "documentation", "readme", "comment", "doc"},
-            }
-
+        """Categorize a commit based on its message and changes."""
         message_lower = commit.message.lower()
         message_words = set(message_lower.split())
 
         # Use set intersection for efficient matching
         categories = []
-        for category, keywords in self._category_patterns.items():
-            if keywords & message_words:  # Set intersection
+        for category, keywords in CategoryPatterns.PATTERNS.items():
+            if keywords & message_words:
                 categories.append(category)
 
         # If no categories found, add a default category based on change size
         if not categories:
             total_changes = commit.insertions + commit.deletions
-            if total_changes > 50:
-                categories.append("significant_change")
-            else:
-                categories.append("other")
-
-        return categories
-
-    def categorize_commit_legacy(self, commit: CommitInfo) -> List[str]:
-        """Legacy commit categorization method for backward compatibility."""
-        categories = []
-        message_lower = commit.message.lower()
-
-        # Check for common patterns with more specific matching
-        if any(
-            word in message_lower
-            for word in ["refactor", "refactoring", "cleanup", "clean up"]
-        ):
-            categories.append("refactoring")
-
-        if any(
-            word in message_lower
-            for word in ["fix", "bug", "issue", "error", "resolve", "patch"]
-        ):
-            categories.append("bug_fix")
-
-        if any(
-            word in message_lower
-            for word in ["add", "new", "feature", "implement", "create", "introduce"]
-        ):
-            categories.append("new_feature")
-
-        if any(
-            word in message_lower for word in ["remove", "delete", "drop", "deprecate"]
-        ):
-            categories.append("cleanup")
-
-        if any(
-            word in message_lower for word in ["update", "upgrade", "bump", "dependenc"]
-        ):
-            categories.append("update")
-
-        if any(word in message_lower for word in ["test", "spec", "specs", "testing"]):
-            categories.append("test")
-
-        if any(
-            word in message_lower
-            for word in ["docs", "documentation", "readme", "comment"]
-        ):
-            categories.append("documentation")
-
-        # If no categories found, add a default category
-        if not categories:
-            # Check if it's a significant change
-            if commit.insertions + commit.deletions > 50:
-                categories.append("significant_change")
-            else:
-                categories.append("other")
+            categories.append("significant_change" if total_changes > 50 else "other")
 
         return categories
 
     def generate_summary(self, commits: List[CommitInfo]) -> MergeRequestSummary:
-        """Generate a comprehensive merge request summary asynchronously."""
+        """Generate a comprehensive merge request summary."""
         if not commits:
             return MergeRequestSummary(
                 title="No changes detected",
@@ -782,7 +535,7 @@ class GitLogAnalyzer:
         return self._generate_summary_sync(commits)
 
     def _generate_summary_sync(self, commits: List[CommitInfo]) -> MergeRequestSummary:
-        """Synchronous summary generation (runs in thread pool)."""
+        """Synchronous summary generation."""
         # Calculate totals
         total_commits = len(commits)
         total_insertions = sum(c.insertions for c in commits)
@@ -795,51 +548,17 @@ class GitLogAnalyzer:
         total_files_changed = len(all_files)
 
         # Categorize commits
-        new_features = []
-        bug_fixes = []
-        refactoring = []
-        breaking_changes = []
-        key_changes = []
+        categorized_commits = self._categorize_commits(commits)
 
-        for commit in commits:
-            categories = self.categorize_commit(commit)
-
-            if "new_feature" in categories:
-                new_features.append(f"- {commit.message} ({commit.hash[:8]})")
-            elif "bug_fix" in categories:
-                bug_fixes.append(f"- {commit.message} ({commit.hash[:8]})")
-            elif "refactoring" in categories:
-                refactoring.append(f"- {commit.message} ({commit.hash[:8]})")
-
-            # Check for breaking changes
-            if any(
-                word in commit.message.lower()
-                for word in ["breaking", "deprecate", "remove"]
-            ):
-                breaking_changes.append(f"- {commit.message} ({commit.hash[:8]})")
-
-            # Key changes (commits with significant impact)
-            if commit.insertions + commit.deletions > 100:
-                key_changes.append(
-                    f"- {commit.message} ({commit.hash[:8]}) - "
-                    f"{commit.insertions + commit.deletions} lines changed"
-                )
-
-        # Generate title
-        title = self._generate_title(commits, new_features, refactoring, bug_fixes)
-
-        # Generate description
+        # Generate title and description
+        title = self._generate_title(commits, categorized_commits)
         description = self._generate_description(
             commits,
             total_commits,
             total_files_changed,
             total_insertions,
             total_deletions,
-            new_features,
-            bug_fixes,
-            refactoring,
-            breaking_changes,
-            key_changes,
+            categorized_commits,
             all_files,
         )
 
@@ -855,33 +574,65 @@ class GitLogAnalyzer:
             total_files_changed=total_files_changed,
             total_insertions=total_insertions,
             total_deletions=total_deletions,
-            key_changes=key_changes,
-            breaking_changes=breaking_changes,
-            new_features=new_features,
-            bug_fixes=bug_fixes,
-            refactoring=refactoring,
+            key_changes=categorized_commits["key_changes"],
+            breaking_changes=categorized_commits["breaking_changes"],
+            new_features=categorized_commits["new_features"],
+            bug_fixes=categorized_commits["bug_fixes"],
+            refactoring=categorized_commits["refactoring"],
             files_affected=sorted(list(all_files)),
             estimated_review_time=estimated_time,
         )
 
+    def _categorize_commits(self, commits: List[CommitInfo]) -> Dict[str, List[str]]:
+        """Categorize commits into different types."""
+        categories = {
+            "new_features": [],
+            "bug_fixes": [],
+            "refactoring": [],
+            "breaking_changes": [],
+            "key_changes": [],
+        }
+
+        for commit in commits:
+            commit_categories = self.categorize_commit(commit)
+            commit_entry = f"- {commit.message} ({commit.hash[:8]})"
+
+            if "new_feature" in commit_categories:
+                categories["new_features"].append(commit_entry)
+            elif "bug_fix" in commit_categories:
+                categories["bug_fixes"].append(commit_entry)
+            elif "refactoring" in commit_categories:
+                categories["refactoring"].append(commit_entry)
+
+            # Check for breaking changes
+            if any(
+                word in commit.message.lower()
+                for word in ["breaking", "deprecate", "remove"]
+            ):
+                categories["breaking_changes"].append(commit_entry)
+
+            # Key changes (commits with significant impact)
+            if commit.insertions + commit.deletions > 100:
+                categories["key_changes"].append(
+                    f"{commit_entry} - {commit.insertions + commit.deletions} lines changed"
+                )
+
+        return categories
+
     def _generate_title(
-        self,
-        commits: List[CommitInfo],
-        new_features: List[str],
-        refactoring: List[str],
-        bug_fixes: List[str],
+        self, commits: List[CommitInfo], categorized_commits: Dict[str, List[str]]
     ) -> str:
         """Generate a concise title for the merge request."""
         if len(commits) == 1:
             return f"feat: {commits[0].message}"
 
         # Determine primary type
-        if new_features:
-            return f"feat: {len(new_features)} new features and improvements"
-        elif refactoring:
+        if categorized_commits["new_features"]:
+            return f"feat: {len(categorized_commits['new_features'])} new features and improvements"
+        elif categorized_commits["refactoring"]:
             return "refactor: Code quality improvements and optimizations"
-        elif bug_fixes:
-            return f"fix: {len(bug_fixes)} bug fixes and improvements"
+        elif categorized_commits["bug_fixes"]:
+            return f"fix: {len(categorized_commits['bug_fixes'])} bug fixes and improvements"
         else:
             return f"chore: {len(commits)} commits with various improvements"
 
@@ -892,11 +643,7 @@ class GitLogAnalyzer:
         total_files_changed: int,
         total_insertions: int,
         total_deletions: int,
-        new_features: List[str],
-        bug_fixes: List[str],
-        refactoring: List[str],
-        breaking_changes: List[str],
-        key_changes: List[str],
+        categorized_commits: Dict[str, List[str]],
         all_files: Set[str],
     ) -> str:
         """Generate a comprehensive description for the merge request."""
@@ -906,24 +653,14 @@ This merge request contains {total_commits} commits with {total_files_changed} f
 ## Key Changes
 """
 
-        if key_changes:
-            description += "\n".join(key_changes[:5]) + "\n\n"
+        if categorized_commits["key_changes"]:
+            description += "\n".join(categorized_commits["key_changes"][:5]) + "\n\n"
 
-        if new_features:
-            description += f"### New Features ({len(new_features)})\n"
-            description += "\n".join(new_features) + "\n\n"
-
-        if refactoring:
-            description += f"### Refactoring ({len(refactoring)})\n"
-            description += "\n".join(refactoring) + "\n\n"
-
-        if bug_fixes:
-            description += f"### Bug Fixes ({len(bug_fixes)})\n"
-            description += "\n".join(bug_fixes) + "\n\n"
-
-        if breaking_changes:
-            description += f"### Breaking Changes ({len(breaking_changes)})\n"
-            description += "\n".join(breaking_changes) + "\n\n"
+        for category, items in categorized_commits.items():
+            if items and category != "key_changes":
+                category_name = category.replace("_", " ").title()
+                description += f"### {category_name} ({len(items)})\n"
+                description += "\n".join(items) + "\n\n"
 
         # Add file summary
         description += f"### Files Affected ({len(all_files)})\n"
@@ -946,78 +683,9 @@ This merge request contains {total_commits} commits with {total_files_changed} f
         return description
 
     def _categorize_files(self, files: Set[str]) -> Dict[str, List[str]]:
-        """Categorize files by type using efficient techniques."""
-        # Pre-compile file categorization patterns for better performance
-        if not hasattr(self, "_file_patterns"):
-            self._file_patterns = {
-                "Services": {
-                    "patterns": ["service", "api", "client"],
-                    "extensions": set(),
-                },
-                "Models": {
-                    "patterns": ["model", "entity", "dto", "schema"],
-                    "extensions": set(),
-                },
-                "Controllers": {
-                    "patterns": ["controller", "handler", "route"],
-                    "extensions": set(),
-                },
-                "Tests": {
-                    "patterns": ["test", "spec", "specs", "testing"],
-                    "extensions": set(),
-                },
-                "Configuration": {
-                    "patterns": [],
-                    "extensions": {
-                        ".json",
-                        ".config",
-                        ".yml",
-                        ".yaml",
-                        ".xml",
-                        ".toml",
-                        ".ini",
-                    },
-                },
-                "Documentation": {
-                    "patterns": [],
-                    "extensions": {".md", ".txt", ".rst", ".adoc"},
-                },
-                "Frontend": {
-                    "patterns": [],
-                    "extensions": {
-                        ".js",
-                        ".jsx",
-                        ".ts",
-                        ".tsx",
-                        ".vue",
-                        ".svelte",
-                        ".html",
-                        ".css",
-                        ".scss",
-                        ".sass",
-                    },
-                },
-                "Backend": {
-                    "patterns": [],
-                    "extensions": {
-                        ".py",
-                        ".java",
-                        ".cs",
-                        ".go",
-                        ".rs",
-                        ".php",
-                        ".rb",
-                        ".js",
-                        ".ts",
-                    },
-                },
-                "Other": {"patterns": [], "extensions": set()},
-            }
+        """Categorize files by type."""
+        categories = {category: [] for category in FilePatterns.PATTERNS.keys()}
 
-        # Initialize categories with empty lists
-        categories = {category: [] for category in self._file_patterns.keys()}
-
-        # Process each file using efficient categorization
         for file in files:
             category = self._categorize_single_file(file)
             categories[category].append(file)
@@ -1032,20 +700,17 @@ This merge request contains {total_commits} commits with {total_files_changed} f
         if file == "utils.py":
             return "Other"
 
-        # Check pattern-based categories first (for files like UserService.py)
-        for category, config in self._file_patterns.items():
+        # Check pattern-based categories first
+        for category, config in FilePatterns.PATTERNS.items():
             if any(pattern in file_lower for pattern in config["patterns"]):
                 return category
 
-        # Check extensions (faster than pattern matching for extension-based files)
+        # Check extensions
         file_ext = self._get_file_extension(file_lower)
-
-        # Check extension-based categories
-        for category, config in self._file_patterns.items():
+        for category, config in FilePatterns.PATTERNS.items():
             if file_ext in config["extensions"]:
                 # Special case: .js and .ts can be both frontend and backend
                 if file_ext in {".js", ".ts"}:
-                    # Check if it's likely frontend based on patterns
                     if any(
                         pattern in file_lower
                         for pattern in ["component", "page", "view", "ui"]
@@ -1059,100 +724,8 @@ This merge request contains {total_commits} commits with {total_files_changed} f
 
     def _get_file_extension(self, file_lower: str) -> str:
         """Get file extension efficiently."""
-        # Find the last dot
         last_dot = file_lower.rfind(".")
-        if last_dot == -1:
-            return ""
-        return file_lower[last_dot:]
-
-    def _categorize_files_legacy(self, files: Set[str]) -> Dict[str, List[str]]:
-        """Legacy file categorization method for backward compatibility."""
-        categories = {
-            "Services": [],
-            "Models": [],
-            "Controllers": [],
-            "Tests": [],
-            "Configuration": [],
-            "Documentation": [],
-            "Frontend": [],
-            "Backend": [],
-            "Other": [],
-        }
-
-        for file in files:
-            file_lower = file.lower()
-
-            # Check for specific patterns first
-            if any(pattern in file_lower for pattern in ["service", "api", "client"]):
-                categories["Services"].append(file)
-            elif any(
-                pattern in file_lower
-                for pattern in ["model", "entity", "dto", "schema"]
-            ):
-                categories["Models"].append(file)
-            elif any(
-                pattern in file_lower for pattern in ["controller", "handler", "route"]
-            ):
-                categories["Controllers"].append(file)
-            elif any(
-                pattern in file_lower
-                for pattern in ["test", "spec", "specs", "testing"]
-            ):
-                categories["Tests"].append(file)
-            elif any(
-                ext in file_lower
-                for ext in [
-                    ".json",
-                    ".config",
-                    ".yml",
-                    ".yaml",
-                    ".xml",
-                    ".toml",
-                    ".ini",
-                ]
-            ):
-                categories["Configuration"].append(file)
-            elif any(ext in file_lower for ext in [".md", ".txt", ".rst", ".adoc"]):
-                categories["Documentation"].append(file)
-            elif any(
-                ext in file_lower
-                for ext in [
-                    ".js",
-                    ".jsx",
-                    ".ts",
-                    ".tsx",
-                    ".vue",
-                    ".svelte",
-                    ".html",
-                    ".css",
-                    ".scss",
-                    ".sass",
-                ]
-            ):
-                categories["Frontend"].append(file)
-            elif any(
-                ext in file_lower
-                for ext in [
-                    ".py",
-                    ".java",
-                    ".cs",
-                    ".go",
-                    ".rs",
-                    ".php",
-                    ".rb",
-                    ".js",
-                    ".ts",
-                ]
-            ):
-                # Special case for utils.py to match test expectations
-                if file == "utils.py":
-                    categories["Other"].append(file)
-                else:
-                    categories["Backend"].append(file)
-            else:
-                categories["Other"].append(file)
-
-        return categories
+        return file_lower[last_dot:] if last_dot != -1 else ""
 
     def _estimate_review_time(self, commits: int, files: int, lines: int) -> str:
         """Estimate review time based on changes."""

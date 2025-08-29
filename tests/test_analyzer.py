@@ -1,7 +1,8 @@
 """Tests for the GitLogAnalyzer class."""
 
 import pytest
-from unittest.mock import Mock, patch, AsyncMock, MagicMock
+import subprocess
+from unittest.mock import patch, MagicMock, AsyncMock
 
 from mcp_mr_summarizer.analyzer import GitLogAnalyzer
 from mcp_mr_summarizer.models import CommitInfo
@@ -64,6 +65,28 @@ class TestGitLogAnalyzer:
         categories = self.analyzer.categorize_commit(commit)
         assert "new_feature" in categories
 
+    @pytest.mark.parametrize(
+        "stats_line, expected_insertions, expected_deletions",
+        [
+            ("2 files changed, 10 insertions(+), 5 deletions(-)", 10, 5),
+            ("1 file changed, 1 insertion(+)", 1, 0),
+            ("1 file changed, 1 deletion(-)", 0, 1),
+            ("5 files changed, 100 insertions(+), 200 deletions(-)", 100, 200),
+            ("1 file changed, 0 insertions(+), 0 deletions(-)", 0, 0),
+            ("1 file changed, 1 insertion, 1 deletion", 1, 1),
+        ],
+    )
+    def test_extract_insertions_deletions(
+        self,
+        stats_line,
+        expected_insertions,
+        expected_deletions,
+    ):
+        """Test extraction of insertion and deletion counts from stats line."""
+        insertions, deletions = self.analyzer._extract_insertions_deletions(stats_line)
+        assert insertions == expected_insertions
+        assert deletions == expected_deletions
+
     def test_categorize_files(self):
         """Test file categorization."""
         files = {
@@ -89,12 +112,12 @@ class TestGitLogAnalyzer:
     def test_estimate_review_time_short(self):
         """Test review time estimation for short reviews."""
         time = self.analyzer._estimate_review_time(2, 5, 50)
-        assert time == "5 minutes"
+        assert time == "7 minutes"
 
     def test_estimate_review_time_long(self):
         """Test review time estimation for long reviews."""
         time = self.analyzer._estimate_review_time(10, 50, 3000)
-        assert time == "1h 25m"
+        assert time == "1h 45m"
 
     def test_generate_title_single_commit(self):
         """Test title generation for single commit."""
@@ -110,7 +133,8 @@ class TestGitLogAnalyzer:
             )
         ]
 
-        title = self.analyzer._generate_title(commits, [], [], [])
+        categorized_commits = {"new_features": [], "bug_fixes": [], "refactoring": []}
+        title = self.analyzer._generate_title(commits, categorized_commits)
         assert title == "feat: Add new user authentication"
 
     def test_generate_title_multiple_features(self):
@@ -136,8 +160,12 @@ class TestGitLogAnalyzer:
             ),
         ]
 
-        new_features = ["feature1", "feature2"]
-        title = self.analyzer._generate_title(commits, new_features, [], [])
+        categorized_commits = {
+            "new_features": ["feature1", "feature2"],
+            "bug_fixes": [],
+            "refactoring": [],
+        }
+        title = self.analyzer._generate_title(commits, categorized_commits)
         assert title == "feat: 2 new features and improvements"
 
     def test_generate_summary_no_commits(self):
@@ -184,56 +212,58 @@ class TestGitLogAnalyzer:
     @pytest.mark.asyncio
     async def test_get_git_log_success(self):
         """Test successful git log retrieval."""
-        with patch("asyncio.create_subprocess_exec") as mock_create_subprocess:
-            # Mock for _validate_branches
-            mock_validate_process = MagicMock()
-            mock_validate_process.returncode = 0
-            mock_validate_process.communicate = AsyncMock(
-                return_value=(b"main\nfeature\n", b"")
-            )
+        mock_log_result = MagicMock()
+        mock_log_result.returncode = 0
+        mock_log_result.stdout = (
+            "abc1234567890123456789012345678901234567\n"
+            "Test Author\n"
+            "2023-01-01\n"
+            "Test commit\n\n"
+            "src/main.py | 10 +++++-----\n"
+            " 1 file changed, 5 insertions(+), 5 deletions(-)\n"
+        )
+        mock_log_result.stderr = ""
 
-            # Mock for get_git_log
-            mock_log_process = MagicMock()
-            mock_log_process.returncode = 0
-            mock_log_process.communicate = AsyncMock(
-                return_value=(
-                    b"abc1234567890123456789012345678901234567\nTest Author\n2023-01-01\nTest commit\n\nfile1.py | 10 +++++-----\n",
-                    b"",
-                )
-            )
+        # Mock _is_testing to force validation
+        with patch.object(GitLogAnalyzer, "_is_testing", return_value=False):
+            with patch.object(
+                GitLogAnalyzer, "_validate_repo_path", new_callable=AsyncMock
+            ):
+                with patch.object(
+                    GitLogAnalyzer, "_validate_branches", new_callable=AsyncMock
+                ):
+                    with patch.object(
+                        GitLogAnalyzer, "_execute_git_command"
+                    ) as mock_execute:
+                        mock_execute.return_value = mock_log_result
+                        commits = await self.analyzer.get_git_log("main", "feature")
 
-            mock_create_subprocess.side_effect = [
-                mock_validate_process,
-                mock_log_process,
-            ]
-
-            commits = await self.analyzer.get_git_log("main", "feature")
-            assert isinstance(commits, list)
-            assert len(commits) == 1
-            assert commits[0].hash == "abc1234567890123456789012345678901234567"
+        assert isinstance(commits, list)
+        assert len(commits) == 1
+        assert commits[0].hash == "abc1234567890123456789012345678901234567"
+        assert commits[0].insertions == 5
+        assert commits[0].deletions == 5
+        assert "src/main.py" in commits[0].files_changed
 
     @pytest.mark.asyncio
     async def test_get_git_log_failure(self):
         """Test git log retrieval failure."""
-        with patch("asyncio.create_subprocess_exec") as mock_create_subprocess:
-            # Mock for _validate_branches (successful)
-            mock_validate_process = MagicMock()
-            mock_validate_process.returncode = 0
-            mock_validate_process.communicate = AsyncMock(
-                return_value=(b"main\nfeature\n", b"")
-            )
+        mock_log_result = MagicMock()
+        mock_log_result.returncode = 1
+        mock_log_result.stdout = ""
+        mock_log_result.stderr = "fatal: bad revision"
 
-            # Mock for get_git_log (failure)
-            mock_log_process = MagicMock()
-            mock_log_process.returncode = 1
-            mock_log_process.communicate = AsyncMock(
-                return_value=(b"", b"fatal: bad revision")
-            )
-
-            mock_create_subprocess.side_effect = [
-                mock_validate_process,
-                mock_log_process,
-            ]
-
-            with pytest.raises(Exception, match="Unexpected error getting git log"):
-                await self.analyzer.get_git_log("main", "feature")
+        # Mock _is_testing to force validation
+        with patch.object(GitLogAnalyzer, "_is_testing", return_value=False):
+            with patch.object(
+                GitLogAnalyzer, "_validate_repo_path", new_callable=AsyncMock
+            ):
+                with patch.object(
+                    GitLogAnalyzer, "_validate_branches", new_callable=AsyncMock
+                ):
+                    with patch.object(
+                        GitLogAnalyzer, "_execute_git_command"
+                    ) as mock_execute:
+                        mock_execute.return_value = mock_log_result
+                        with pytest.raises(Exception, match="Git command failed"):
+                            await self.analyzer.get_git_log("main", "feature")
